@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   // For GitHub Pages: set base to '/<REPO_NAME>/' in production.
   // Change 'website' to your actual repository name.
-  base: process.env.NODE_ENV === 'production' ? '/website/' : '/',
+  base: process.env.NODE_ENV === 'production' ? '/world-weather/' : '/',
   server: {
     port: 5173,
     open: true,
