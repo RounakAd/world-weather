@@ -88,8 +88,8 @@ function buildLut(
       if (rho2 > 1) continue;
 
       const rho = Math.sqrt(rho2);
-      const cosC = Math.sqrt(Math.max(0, 1 - rho2)); // cos of angular distance
-      const sinC = rho;
+      // cos of the angular distance from the disc centre
+      const cosC = Math.sqrt(Math.max(0, 1 - rho2));
 
       let latDeg: number;
       let lonDeg: number;
@@ -97,8 +97,12 @@ function buildLut(
         latDeg = 0;
         lonDeg = 0;
       } else {
-        latDeg = Math.asin(Math.max(-1, Math.min(1, (dy * sinC) / rho))) / DEG;
-        lonDeg = Math.atan2(dx * sinC, rho * cosC) / DEG;
+        // Orthographic projection of a unit sphere, view centred on the equator:
+        // the screen y coordinate *is* sin(latitude), and atan2(x, z) is the
+        // longitude. Canvas y grows downward, so latitude comes from -dy —
+        // without that negation the globe renders upside down.
+        latDeg = Math.asin(Math.max(-1, Math.min(1, -dy))) / DEG;
+        lonDeg = Math.atan2(dx, cosC) / DEG;
       }
 
       // --- vertical texture coordinate, and the bilinear pair around it

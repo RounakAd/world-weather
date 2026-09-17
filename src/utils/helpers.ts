@@ -1,5 +1,8 @@
 import {
   AirQualityData,
+  RainOutlook,
+  RainSlot,
+  RainWindow,
   TemperatureUnit,
   WeatherAlert,
   WeatherCondition,
@@ -574,6 +577,60 @@ export function generateWeatherAlerts(data: WeatherData): WeatherAlert[] {
     });
 
   return alerts;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Rain outlook                                                              */
+/* -------------------------------------------------------------------------- */
+
+/** Probability at or above which an hour counts as "might rain". */
+export const RAIN_THRESHOLD = 30;
+
+function isRainyHour(slot: RainSlot): boolean {
+  return slot.precipProb >= RAIN_THRESHOLD || slot.rainfall > 0.1;
+}
+
+/**
+ * Collapses today's hourly precipitation into the handful of windows a person
+ * actually cares about — "4 PM to 7 PM" rather than three separate rows.
+ */
+export function buildRainOutlook(slots: RainSlot[]): RainOutlook {
+  const windows: RainWindow[] = [];
+  let run: RainSlot[] = [];
+
+  const flush = () => {
+    if (run.length === 0) return;
+    windows.push({
+      startTime: run[0].time,
+      endTime: run[run.length - 1].time,
+      startLabel: run[0].label,
+      endLabel: run[run.length - 1].label,
+      peakProb: Math.max(...run.map((slot) => slot.precipProb)),
+      totalRainfall: Math.round(run.reduce((sum, slot) => sum + slot.rainfall, 0) * 10) / 10,
+      hours: run.length,
+      isPast: run.every((slot) => slot.isPast),
+      isNow: run.some((slot) => slot.isNow),
+    });
+    run = [];
+  };
+
+  slots.forEach((slot) => {
+    if (isRainyHour(slot)) run.push(slot);
+    else flush();
+  });
+  flush();
+
+  const rainySlots = slots.filter(isRainyHour);
+
+  return {
+    slots,
+    windows,
+    peakProb: slots.length ? Math.max(...slots.map((slot) => slot.precipProb)) : 0,
+    totalRainfall: Math.round(slots.reduce((sum, slot) => sum + slot.rainfall, 0) * 10) / 10,
+    rainyHours: rainySlots.length,
+    nextWindow: windows.find((window) => !window.isPast) ?? null,
+    currentlyRaining: slots.some((slot) => slot.isNow && isRainyHour(slot)),
+  };
 }
 
 /* -------------------------------------------------------------------------- */

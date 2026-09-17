@@ -104,6 +104,47 @@ export interface WeatherAlert {
   detail: string;
 }
 
+/** One hour of today's precipitation picture. */
+export interface RainSlot {
+  /** Local ISO time, e.g. 2026-09-17T14:00 */
+  time: string;
+  /** Formatted in the city's own timezone, e.g. "2 PM" */
+  label: string;
+  /** 0–23, city local time. */
+  hour: number;
+  precipProb: number;
+  rainfall: number;
+  condition: WeatherCondition;
+  isPast: boolean;
+  isNow: boolean;
+}
+
+/** A run of consecutive hours where rain is possible. */
+export interface RainWindow {
+  startTime: string;
+  endTime: string;
+  startLabel: string;
+  endLabel: string;
+  peakProb: number;
+  totalRainfall: number;
+  hours: number;
+  isPast: boolean;
+  isNow: boolean;
+}
+
+export interface RainOutlook {
+  /** Every hour of the current local day, 00:00 → 23:00. */
+  slots: RainSlot[];
+  /** Consecutive runs where rain is possible, grouped for readability. */
+  windows: RainWindow[];
+  peakProb: number;
+  totalRainfall: number;
+  rainyHours: number;
+  /** The next window that has not finished yet, if any. */
+  nextWindow: RainWindow | null;
+  currentlyRaining: boolean;
+}
+
 export interface WeatherData {
   city: string;
   country: string;
@@ -155,6 +196,9 @@ export interface WeatherData {
 
   rainProbability: number;
   rainfall: number;
+
+  /** Full picture of today's rain, including hours that have already passed. */
+  todayRain: RainOutlook;
 
   hourly: HourlyForecast[];
   forecast: DayForecast[];

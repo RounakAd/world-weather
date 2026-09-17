@@ -315,6 +315,9 @@ class WeatherService {
       daily: DAILY_FIELDS,
       timezone: 'auto',
       forecast_days: days.toString(),
+      // One day of history so today's earlier hours are available — that is what
+      // lets the rain timeline show the whole local day, not just the remainder.
+      past_days: '1',
       wind_speed_unit: 'kmh',
     });
     return `${FORECAST_URL}?${params}`;
