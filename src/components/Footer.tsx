@@ -3,6 +3,7 @@ import GlassCard from './GlassCard';
 
 const SECTIONS = [
   { id: 'current-weather', label: 'Current weather' },
+  { id: 'world-clocks', label: 'World clocks' },
   { id: 'forecast', label: 'Forecast' },
   { id: 'insights', label: 'Trends & air' },
   { id: 'city-grid', label: 'All cities' },

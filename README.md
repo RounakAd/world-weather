@@ -11,25 +11,41 @@ city's own timezone, not the visitor's.
 ## ✨ What's inside
 
 ### Immersive 3D presentation
-- **Five-layer parallax background** — the sky gradient, celestial body, star field, aurora blobs and
-  drifting clouds all move at different rates against both scroll and pointer movement.
-- **Weather-reactive ambience** — the entire palette shifts with the selected city's condition and
-  day/night state, and follows the light/dark theme.
-- **Real 3D glass cards** — pointer-tracked tilt with spring physics, a travelling specular highlight,
-  layered rims and depth-sorted content.
-- **Animated 3D globe** in the hero with orbiting rings, a rotating graticule and a counter-rotating
-  satellite marker.
-- Scroll progress bar, glass header that condenses on scroll, and reveal animations throughout.
+- **A real, rotating Earth.** NASA Blue Marble imagery mapped onto a sphere with a
+  per-pixel orthographic renderer — day texture, a drifting cloud layer, night-side
+  city lights and an atmospheric limb glow, lit by a fixed sun so the terminator
+  sweeps across the surface as the planet turns. The selected city is pinned with a
+  glowing marker that fades out as it rotates to the far side.
+- **Live world clocks.** A large analog clock for the selected city plus ten
+  reference timezones (UTC, EST, PST, CET, IST, JST, AEST, CST, MST, GMT), each with
+  hour/minute/second hands and a digital AM/PM readout beneath it.
+- **Five-layer parallax background** — the sky gradient, light source, star field,
+  aurora blobs and drifting clouds all move at different rates against both scroll
+  and pointer movement.
+- **Weather-reactive ambience** — the entire palette shifts with the selected city's
+  condition and day/night state, and follows the light/dark theme.
+- **Real 3D glass cards** — pointer-tracked tilt with spring physics, a travelling
+  specular highlight, layered rims and depth-sorted content.
+- Scroll progress bar, glass header that condenses on scroll, and reveal animations
+  throughout.
 
 ### Accurate, timezone-correct data
-- **Local-time everything.** The hourly timeline is indexed against the API's own local ISO timestamps
-  and the city's UTC offset — so a forecast for Tokyo reads in JST even when you are in London.
-- **Day/night-aware iconography.** A hand-built SVG icon set where clear skies are a sun by day and a
-  moon by night, and partly-cloudy flips its celestial body after dusk.
-- **Real readings**, not placeholders: visibility, dew point, pressure (station + MSL), cloud cover,
-  UV index, wind gusts, sunrise/sunset, solar noon, daylight duration and a computed moon phase.
-- **Two batched requests** cover all 50 cities (weather + air quality) instead of one hundred, with
-  in-flight de-duplication and a 10-minute cache.
+- **Local-time everything.** The hourly timeline is indexed against the API's own
+  local ISO timestamps and the city's UTC offset — so a forecast for Tokyo reads in
+  JST even when you are in London.
+- **Real offsets on every clock.** Timezone offsets come from the browser's IANA
+  database, not hardcoded constants, so daylight saving is applied automatically.
+  In September the EST card correctly reads UTC−04:00 and carries a `DST` tag; the
+  GMT card shows the UK's summer offset. Each clock also shows whether it is
+  currently day or night locally.
+- **Day/night-aware iconography.** A hand-built SVG icon set where clear skies are a
+  sun by day and a moon by night, and partly-cloudy flips its celestial body after
+  dusk.
+- **Real readings**, not placeholders: visibility, dew point, pressure (station +
+  MSL), cloud cover, UV index, wind gusts, sunrise/sunset, solar noon, daylight
+  duration and a computed moon phase.
+- **Two batched requests** cover all 50 cities (weather + air quality) instead of one
+  hundred, with in-flight de-duplication and a 10-minute cache.
 
 ### Working city search
 - Instant matches from the bundled city list, then live Open-Meteo geocoding for the rest of the world.
@@ -86,29 +102,36 @@ geocoding), which is free for non-commercial use.
 ## 🧱 Tech stack
 
 React 18 · TypeScript · Vite 6 · Tailwind CSS 3.4 · Framer Motion · Recharts · Lucide React ·
-Open-Meteo API
+Open-Meteo API · a hand-written canvas globe renderer
 
 ## 🗂️ Project structure
 
 ```
 src/
-  components/     UI — parallax backdrop, glass primitives, SVG weather icons, every panel
+  components/     UI — canvas Earth, analog clocks, parallax backdrop, glass primitives,
+                  SVG weather icons, every panel
   context/        WeatherProvider: selection, units, theme, favourites, batched summaries
   data/           Bundled 50-city list, search helpers, generated world map paths
-  hooks/          useWeather, useAirQuality, useCitySummaries, useCitySearch, useLocalClock
+  hooks/          useWeather, useAirQuality, useCitySummaries, useCitySearch, useLocalClock, useNow
   services/       Open-Meteo client: parsing, timezone handling, batching, geocoding, caching
   types/          Shared domain types
-  utils/          Formatting, AQI/UV/Beaufort scales, moon phase, sky palettes, narratives
+  utils/          Formatting, AQI/UV/Beaufort scales, moon phase, sky palettes, timezone maths
 ```
 
-`src/data/worldMap.ts` is generated from Natural Earth 110m land data — see the header comment in the
-file for provenance.
+### Generated and third-party assets
+- `src/data/worldMap.ts` — generated from Natural Earth 110m land data (see the file header).
+- `public/textures/earth-*.webp` — NASA Blue Marble imagery (day), cloud cover and night-time city
+  lights, re-encoded to WebP (~290 KB total). Public domain.
 
 ## 🌐 Deployment
 
-The Vite config sets `base` to `/world-weather/` for production builds. Update that value (and the
-GitHub Actions workflow) if your repository has a different name. To deploy anywhere else, set
-`base` to `/`.
+`vite.config.ts` derives the base path automatically: `VITE_BASE_PATH` if set, otherwise the
+repository name reported by GitHub Actions (`/<repo>/` for project sites, `/` for
+`<owner>.github.io` sites), otherwise `/` for local dev and custom domains. Nothing needs configuring
+for GitHub Pages.
+
+The deploy workflow fails the build if `index.html` does not reference assets under the expected
+prefix — a wrong base path is otherwise a silent white screen.
 
 ---
 

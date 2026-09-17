@@ -4,6 +4,7 @@ import { Calendar, CloudSun, Compass, Globe, MapPin, Navigation, Sparkles } from
 import { useWeatherContext } from '../context/WeatherContext';
 import { useLocalClock, useWeather } from '../hooks/useWeather';
 import GlassCard from './GlassCard';
+import EarthGlobe from './EarthGlobe';
 import WeatherIcon from './WeatherIcon';
 import { formatTemp, getWindDirectionLong } from '../utils/helpers';
 
@@ -141,7 +142,7 @@ export default function Hero() {
           {/* ------------------------------ 3D globe --------------------------- */}
           <motion.div
             style={{ y: globeY, scale: globeScale }}
-            className="relative mx-auto hidden aspect-square w-full max-w-md lg:block"
+            className="relative mx-auto mt-2 aspect-square w-full max-w-[16rem] sm:max-w-[20rem] lg:mt-0 lg:max-w-md"
           >
             <div className="perspective-1600 relative h-full w-full">
               <div className="preserve-3d relative h-full w-full" style={{ transform: 'rotateX(12deg)' }}>
@@ -152,7 +153,7 @@ export default function Hero() {
                 {[0, 1, 2].map((ring) => (
                   <motion.div
                     key={ring}
-                    className="absolute rounded-full border border-white/40 dark:border-slate-500/30"
+                    className="absolute rounded-full border border-white/25 dark:border-slate-400/20"
                     style={{
                       inset: `${ring * 7}%`,
                       transform: `rotateX(72deg) rotateZ(${ring * 22}deg)`,
@@ -162,66 +163,11 @@ export default function Hero() {
                   />
                 ))}
 
-                {/* sphere */}
-                <div
-                  className="absolute inset-[14%] overflow-hidden rounded-full"
-                  style={{
-                    background:
-                      'radial-gradient(circle at 32% 28%, rgba(129,140,248,0.95), rgba(56,189,248,0.75) 38%, rgba(15,23,42,0.92) 78%)',
-                    boxShadow:
-                      'inset -18px -22px 60px rgba(2,6,23,0.85), inset 12px 14px 40px rgba(255,255,255,0.28), 0 30px 80px -20px rgba(79,70,229,0.6)',
-                  }}
-                >
-                  {/* meridians + parallels */}
-                  <motion.svg
-                    viewBox="0 0 200 200"
-                    className="absolute inset-0 h-full w-full opacity-60"
-                    animate={reduceMotion ? {} : { x: ['0%', '-50%'] }}
-                    transition={{ duration: 42, repeat: Infinity, ease: 'linear' }}
-                    style={{ width: '200%' }}
-                  >
-                    {Array.from({ length: 12 }).map((_, index) => (
-                      <ellipse
-                        key={`m-${index}`}
-                        cx={100 + index * 20}
-                        cy="100"
-                        rx={18}
-                        ry="98"
-                        fill="none"
-                        stroke="rgba(255,255,255,0.42)"
-                        strokeWidth="0.7"
-                      />
-                    ))}
-                    {Array.from({ length: 6 }).map((_, index) => {
-                      const y = 20 + index * 32;
-                      const ry = Math.abs(100 - y) / 100;
-                      return (
-                        <ellipse
-                          key={`p-${index}`}
-                          cx="100"
-                          cy={y}
-                          rx={98 * Math.sqrt(Math.max(0.05, 1 - ry * ry))}
-                          ry={8 * Math.sqrt(Math.max(0.05, 1 - ry * ry))}
-                          fill="none"
-                          stroke="rgba(255,255,255,0.3)"
-                          strokeWidth="0.7"
-                        />
-                      );
-                    })}
-                    {/* landmass suggestion */}
-                    <path
-                      d="M42 62c8-10 20-13 28-8 6 4 3 12-4 16-9 5-20 9-26 3-4-4-2-8 2-11zM118 52c10-8 26-9 34-2 7 6 3 15-6 19-11 5-26 4-32-3-4-5-2-11 4-14zM96 108c9-6 22-6 29 1 6 6 2 14-6 18-9 4-22 3-27-3-4-5-1-12 4-16zM36 132c7-5 17-5 22 1 4 5 1 11-5 14-8 3-17 2-21-3-3-4-1-9 4-12z"
-                      fill="rgba(255,255,255,0.34)"
-                    />
-                  </motion.svg>
-
-                  {/* terminator shading */}
-                  <div
-                    className="absolute inset-0 rounded-full"
-                    style={{
-                      background:
-                        'radial-gradient(circle at 76% 74%, rgba(2,6,23,0.72) 0%, rgba(2,6,23,0.18) 42%, transparent 68%)',
-                    }}
+                {/* the real Earth — NASA Blue Marble, lit and rotating */}
+                <div className="absolute inset-[6%]">
+                  <EarthGlobe
+                    marker={{ lat: selectedCity.lat, lng: selectedCity.lng, label: selectedCity.name }}
+                    maxSize={460}
                   />
                 </div>
 

@@ -113,29 +113,16 @@ export default function ParallaxBackground({ condition, isDay, theme }: Parallax
         }}
       />
 
-      {/* ---- Layer 1: celestial body -------------------------------------- */}
+      {/* ---- Layer 1: distant light source -------------------------------- */}
       <motion.div
-        className="absolute right-[8%] top-[6%] h-56 w-56 rounded-full blur-[2px] md:h-72 md:w-72"
+        className="absolute right-[2%] top-[1%] h-[30vh] w-[30vh] rounded-full blur-[90px] md:h-[36vh] md:w-[36vh]"
         style={{
           x: farX,
           y: farY,
-          background:
-            theme === 'dark'
-              ? warm
-                ? 'radial-gradient(circle at 35% 35%, #fef3c7, #fbbf24 42%, rgba(217,119,6,0.28) 68%, transparent 78%)'
-                : 'radial-gradient(circle at 38% 34%, #ffffff, #e0e7ff 45%, rgba(199,210,254,0.22) 72%, transparent 80%)'
-              : warm
-                ? 'radial-gradient(circle at 35% 35%, #fff7d6, #fcd34d 45%, rgba(251,146,60,0.35) 70%, transparent 78%)'
-                : 'radial-gradient(circle at 38% 34%, #f8fafc, #c7d2fe 45%, rgba(129,140,248,0.3) 72%, transparent 80%)',
-          boxShadow:
-            theme === 'dark'
-              ? warm
-                ? '0 0 150px 30px rgba(251,191,36,0.22)'
-                : '0 0 130px 26px rgba(165,180,252,0.22)'
-              : warm
-                ? '0 0 160px 40px rgba(251,191,36,0.35)'
-                : '0 0 150px 36px rgba(129,140,248,0.4)',
-          opacity: theme === 'dark' ? 0.7 : 0.85,
+          background: warm
+            ? 'radial-gradient(circle at 42% 40%, rgba(254,243,199,0.75), rgba(251,191,36,0.4) 42%, rgba(217,119,6,0.12) 68%, transparent 82%)'
+            : 'radial-gradient(circle at 42% 40%, rgba(226,232,240,0.6), rgba(165,180,252,0.32) 44%, rgba(99,102,241,0.1) 70%, transparent 84%)',
+          opacity: theme === 'dark' ? 0.45 : 0.55,
         }}
       />
 

@@ -8,6 +8,7 @@ import Header from './components/Header';
 import Hero from './components/Hero';
 import FavoritesBar from './components/FavoritesBar';
 import FeaturedWeather from './components/FeaturedWeather';
+import WorldClocks from './components/WorldClocks';
 import HourlyForecast from './components/HourlyForecast';
 import SevenDayForecast from './components/SevenDayForecast';
 import WeatherTrends from './components/WeatherTrends';
@@ -37,6 +38,7 @@ function AppShell() {
         <Hero />
         <FavoritesBar />
         <FeaturedWeather />
+        <WorldClocks />
 
         <section id="forecast" className="scroll-mt-28 px-4 py-6">
           <div className="mx-auto max-w-7xl space-y-5">
