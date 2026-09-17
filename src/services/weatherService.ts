@@ -4,12 +4,14 @@ import {
   CitySummary,
   DayForecast,
   HourlyForecast,
+  RainSlot,
   WeatherCondition,
   WeatherData,
   WeatherIconKind,
 } from '../types/weather';
 import { continentFromCoordinates } from '../data/cities';
 import {
+  buildRainOutlook,
   chunk,
   computeDewPoint,
   computeHeatIndex,
@@ -27,6 +29,7 @@ import {
   minutesFromIso,
   shortDateFromIso,
 } from '../utils/helpers';
+import { zoneOffsetMinutes } from '../utils/timezones';
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const AIR_URL = 'https://air-quality-api.open-meteo.com/v1/air-quality';
@@ -348,6 +351,11 @@ class WeatherService {
     const offset = data.utc_offset_seconds ?? 0;
     const clock = localClock(offset);
 
+    /* `past_days=1` puts yesterday at the head of the daily series, so index 0 is
+       no longer today. The city's own wall-clock date is the only safe anchor. */
+    const todayIso = clock.iso;
+    const todayIndex = Math.max(0, daily.time.indexOf(todayIso));
+
     /* ---- locate "now" inside the hourly series using the city's own clock -- */
     const currentIso = current.time.slice(0, 13); // 2026-09-17T13
     let startIndex = hourly.time.findIndex((t) => t.slice(0, 13) >= currentIso);
@@ -405,34 +413,59 @@ class WeatherService {
       });
     }
 
-    /* ---- daily ------------------------------------------------------------ */
-    const forecast: DayForecast[] = daily.time.map((date, index) => {
-      const dayCode = daily.weather_code[index];
-      const condition = wmoToCondition(dayCode, true);
-      const kind = iconKindFor(condition, true);
-      const sun = sunByDate.get(date);
-
-      return {
-        date,
-        isToday: index === 0,
-        day: dayLabelFromIso(date),
-        dateLabel: shortDateFromIso(date),
-        tempMax: Math.round(daily.temperature_2m_max[index]),
-        tempMin: Math.round(daily.temperature_2m_min[index]),
-        condition,
-        icon: iconEmoji(kind),
-        iconKind: kind,
-        rainProb: Math.round(daily.precipitation_probability_max?.[index] ?? 0),
-        rainfall: Math.round((daily.precipitation_sum?.[index] ?? 0) * 10) / 10,
-        windSpeed: Math.round(daily.wind_speed_10m_max?.[index] ?? 0),
-        windGust: Math.round(daily.wind_gusts_10m_max?.[index] ?? 0),
-        humidity: Math.round(current.relative_humidity_2m),
-        uvIndex: Math.round(daily.uv_index_max?.[index] ?? 0),
-        sunrise: sun ? formatClockFromIso(sun.riseIso) : '—',
-        sunset: sun ? formatClockFromIso(sun.setIso) : '—',
-        daylight: daily.daylight_duration?.[index] ? formatDuration(daily.daylight_duration[index]) : '—',
-      };
+    /* ---- today's rain timeline -------------------------------------------- */
+    // Every hour of the city's current calendar day — hours that have already
+    // passed included, so the card can show the whole day's timings rather than
+    // only what is left of it.
+    const rainSlots: RainSlot[] = [];
+    hourly.time.forEach((time, index) => {
+      if (!time.startsWith(todayIso)) return;
+      rainSlots.push({
+        time,
+        label: formatHourLabel(time),
+        hour: Number(time.slice(11, 13)),
+        precipProb: Math.round(hourly.precipitation_probability?.[index] ?? 0),
+        rainfall: Math.round((hourly.precipitation?.[index] ?? 0) * 10) / 10,
+        condition: wmoToCondition(hourly.weather_code[index], hourly.is_day?.[index] === 1),
+        isPast: index < startIndex,
+        isNow: index === startIndex,
+      });
     });
+    const todayRain = buildRainOutlook(rainSlots);
+
+    /* ---- daily ------------------------------------------------------------ */
+    // Any past day at the head of the series is dropped, and the week starts today.
+    const forecast: DayForecast[] = daily.time
+      .map((date, index) => ({ date, index }))
+      .filter((entry) => entry.index >= todayIndex)
+      .slice(0, 7)
+      .map(({ date, index }) => {
+        const dayCode = daily.weather_code[index];
+        const condition = wmoToCondition(dayCode, true);
+        const kind = iconKindFor(condition, true);
+        const sun = sunByDate.get(date);
+
+        return {
+          date,
+          isToday: date === todayIso,
+          day: dayLabelFromIso(date),
+          dateLabel: shortDateFromIso(date),
+          tempMax: Math.round(daily.temperature_2m_max[index]),
+          tempMin: Math.round(daily.temperature_2m_min[index]),
+          condition,
+          icon: iconEmoji(kind),
+          iconKind: kind,
+          rainProb: Math.round(daily.precipitation_probability_max?.[index] ?? 0),
+          rainfall: Math.round((daily.precipitation_sum?.[index] ?? 0) * 10) / 10,
+          windSpeed: Math.round(daily.wind_speed_10m_max?.[index] ?? 0),
+          windGust: Math.round(daily.wind_gusts_10m_max?.[index] ?? 0),
+          humidity: Math.round(current.relative_humidity_2m),
+          uvIndex: Math.round(daily.uv_index_max?.[index] ?? 0),
+          sunrise: sun ? formatClockFromIso(sun.riseIso) : '—',
+          sunset: sun ? formatClockFromIso(sun.setIso) : '—',
+          daylight: daily.daylight_duration?.[index] ? formatDuration(daily.daylight_duration[index]) : '—',
+        };
+      });
 
     /* ---- current ---------------------------------------------------------- */
     const isDay = current.is_day === 1;
@@ -442,7 +475,7 @@ class WeatherService {
     const nowIndex = startIndex;
     const nowHour = hourlyForecast[0];
 
-    const todaySun = sunByDate.get(daily.time[0]);
+    const todaySun = sunByDate.get(todayIso);
     const sunriseMinutes = todaySun?.rise ?? 6 * 60;
     const sunsetMinutes = todaySun?.set ?? 18 * 60;
     const sunrise = todaySun ? formatClockFromIso(todaySun.riseIso) : '—';
@@ -481,8 +514,8 @@ class WeatherService {
             ? computeHeatIndex(current.temperature_2m, current.relative_humidity_2m)
             : computeWindChill(current.temperature_2m, current.wind_speed_10m)),
       ),
-      tempMin: Math.round(daily.temperature_2m_min[0]),
-      tempMax: Math.round(daily.temperature_2m_max[0]),
+      tempMin: Math.round(daily.temperature_2m_min[todayIndex]),
+      tempMax: Math.round(daily.temperature_2m_max[todayIndex]),
       condition,
       icon: iconEmoji(kind),
       iconKind: kind,
@@ -498,7 +531,7 @@ class WeatherService {
       pressure: Math.round(current.surface_pressure),
       pressureMsl: Math.round(current.pressure_msl ?? current.surface_pressure),
       cloudCover: Math.round(current.cloud_cover ?? 0),
-      uvIndex: Math.round(hourly.uv_index?.[nowIndex] ?? daily.uv_index_max?.[0] ?? 0),
+      uvIndex: Math.round(hourly.uv_index?.[nowIndex] ?? daily.uv_index_max?.[todayIndex] ?? 0),
 
       sunrise,
       sunset,
@@ -518,6 +551,8 @@ class WeatherService {
       rainProbability: nowHour?.precipProb ?? 0,
       rainfall: Math.round((current.precipitation ?? 0) * 10) / 10,
 
+      isSample: false,
+      todayRain,
       hourly: hourlyForecast,
       forecast,
       alerts: [],
@@ -763,66 +798,152 @@ class WeatherService {
 
   private getFallbackWeather(city: City): WeatherData {
     const seed = Array.from(city.name).reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const temp = 14 + (seed % 18);
-    const condition: WeatherCondition = 'Partly Cloudy';
-    const kind = iconKindFor(condition, true);
-    const clock = localClock(offsetForTimezoneGuess(city.timezone));
+    const utcOffsetSeconds = offsetSecondsForZone(city.timezone);
+    const clock = localClock(utcOffsetSeconds);
     const moon = getMoonPhase();
 
+    /** Stable pseudo-random 0..1, so every panel tells the same story. */
+    const noise = (slot: number) => {
+      const raw = Math.sin(seed * 12.9898 + slot * 78.233) * 43758.5453;
+      return raw - Math.floor(raw);
+    };
+
+    const nowHour = Math.floor(clock.minutes / 60);
+    const isDayAt = (hour: number) => hour >= 6 && hour < 19;
+
+    /* A city's own local date, so the week opens on *its* today. */
+    const localDateAt = (dayOffset: number) => {
+      const date = new Date(`${clock.iso}T00:00:00Z`);
+      date.setUTCDate(date.getUTCDate() + dayOffset);
+      return date.toISOString().slice(0, 10);
+    };
+    const clockLabel = (minutes: number) =>
+      formatHourLabel(
+        `2000-01-01T${Math.floor(minutes / 60)
+          .toString()
+          .padStart(2, '0')}:${(minutes % 60).toString().padStart(2, '0')}`,
+      );
+
+    /* One rain band a day, placed by the city name. The sky, the hourly strip and
+       the rain timeline all read from it, so they can never contradict each other. */
+    const peakHour = 5 + (seed % 16); // somewhere between 5 AM and 8 PM
+    const rainChanceAt = (hour: number) => {
+      const gap = Math.abs(hour - peakHour) % 24;
+      const distance = Math.min(gap, 24 - gap);
+      return Math.round(Math.max(4, 82 * Math.exp(-(distance * distance) / 4)));
+    };
+    const rainAmountAt = (hour: number) => {
+      const chance = rainChanceAt(hour);
+      return chance >= 60 ? Math.round((chance / 40) * 10) / 10 : 0;
+    };
+    const conditionAt = (hour: number): WeatherCondition => {
+      const chance = rainChanceAt(hour);
+      if (chance >= 70) return 'Rain';
+      if (chance >= 45) return 'Light Rain';
+      if (chance >= 25) return 'Cloudy';
+      return isDayAt(hour) ? 'Sunny' : 'Clear';
+    };
+
+    const baseTemp = 12 + (seed % 16);
+    const tempAtHour = (hour: number) => Math.round(baseTemp + Math.sin(((hour - 4) / 24) * Math.PI * 2) * 5);
+    const humidityAtHour = (hour: number) =>
+      Math.round(
+        Math.min(95, Math.max(32, 56 + 26 * Math.sin(((hour + 3) / 24) * Math.PI * 2) + rainChanceAt(hour) / 5)),
+      );
+    const windAtHour = (hour: number) =>
+      Math.round(7 + 10 * Math.abs(Math.sin(((hour + 9) / 24) * Math.PI * 2)) + rainChanceAt(hour) / 14);
+
     const hourly: HourlyForecast[] = Array.from({ length: 24 }, (_, index) => {
-      const hour = (clock.minutes / 60 + index) % 24;
-      const isDay = hour >= 6 && hour < 19;
-      const tempAtHour = Math.round(temp + Math.sin(((hour - 4) / 24) * Math.PI * 2) * 4);
-      const cond: WeatherCondition = isDay ? 'Partly Cloudy' : 'Clear';
-      const k = iconKindFor(cond, isDay);
-      const iso = `2000-01-01T${Math.floor(hour).toString().padStart(2, '0')}:00`;
+      const hour = (nowHour + index) % 24;
+      const isDay = isDayAt(hour);
+      const condition = conditionAt(hour);
+      const kind = iconKindFor(condition, isDay);
+      const temp = tempAtHour(hour);
+      const humidity = humidityAtHour(hour);
+      const iso = `2000-01-01T${hour.toString().padStart(2, '0')}:00`;
       return {
         time: iso,
         label: formatHourLabel(iso),
-        dayLabel: index === 0 ? 'Today' : 'Tomorrow',
+        dayLabel: index === 0 || hour > nowHour ? 'Today' : 'Tomorrow',
         isNow: index === 0,
         isDay,
-        temp: tempAtHour,
-        feelsLike: tempAtHour + 1,
-        condition: cond,
-        icon: iconEmoji(k),
-        iconKind: k,
-        precipProb: 15 + (index % 4) * 6,
-        rainfall: 0,
-        humidity: 62,
-        dewPoint: tempAtHour - 5,
-        wind: 12,
-        windGust: 20,
-        windDirection: 180,
-        uvIndex: isDay ? 5 : 0,
-        pressure: 1013,
-      };
-    });
-
-    const forecast: DayForecast[] = Array.from({ length: 7 }, (_, index) => {
-      const d = new Date(Date.now() + index * 86400000);
-      const iso = d.toISOString().slice(0, 10);
-      return {
-        date: iso,
-        isToday: index === 0,
-        day: dayLabelFromIso(iso),
-        dateLabel: shortDateFromIso(iso),
-        tempMax: temp + 3,
-        tempMin: temp - 4,
+        temp,
+        feelsLike: temp + (humidity > 70 ? 2 : -1),
         condition,
         icon: iconEmoji(kind),
         iconKind: kind,
-        rainProb: 20 + (index % 3) * 10,
-        rainfall: 0,
-        windSpeed: 12,
-        windGust: 20,
-        humidity: 62,
-        uvIndex: 5,
-        sunrise: '6:00 AM',
-        sunset: '6:30 PM',
-        daylight: '12h 30m',
+        precipProb: rainChanceAt(hour),
+        rainfall: rainAmountAt(hour),
+        humidity,
+        dewPoint: Math.round(computeDewPoint(temp, humidity)),
+        wind: windAtHour(hour),
+        windGust: windAtHour(hour) + 6 + Math.round(noise(hour + 40) * 9),
+        windDirection: Math.round(noise(hour + 70) * 360),
+        uvIndex: isDay ? Math.round(Math.max(0, 9 - rainChanceAt(hour) / 10) * Math.sin(((hour - 6) / 12) * Math.PI)) : 0,
+        pressure: Math.round(1005 + noise(hour + 110) * 17),
       };
     });
+
+    /* The whole local day, so the offline card still shows when rain is likely. */
+    const rainSlots: RainSlot[] = Array.from({ length: 24 }, (_, hour) => {
+      const iso = `2000-01-01T${hour.toString().padStart(2, '0')}:00`;
+      return {
+        time: iso,
+        label: formatHourLabel(iso),
+        hour,
+        precipProb: rainChanceAt(hour),
+        rainfall: rainAmountAt(hour),
+        condition: conditionAt(hour),
+        isPast: hour < nowHour,
+        isNow: hour === nowHour,
+      };
+    });
+    const todayRain = buildRainOutlook(rainSlots);
+
+    const forecast: DayForecast[] = Array.from({ length: 7 }, (_, index) => {
+      const date = localDateAt(index);
+      const today = index === 0;
+      // A slow multi-day drift plus a little day-to-day noise, so no two days in
+      // the week ever read as identical.
+      const drift = Math.round(Math.sin((index + (seed % 7)) / 3.1) * 3);
+      const swing = Math.round((noise(index * 5) - 0.5) * 5);
+      const outlook = FALLBACK_DAY_CONDITIONS[Math.floor(noise(index * 13) * FALLBACK_DAY_CONDITIONS.length)];
+      const dayCondition: WeatherCondition = today ? conditionAt(peakHour) : outlook.condition;
+      const kind = iconKindFor(dayCondition, true);
+      const sunriseMinutes = 355 + index;
+      const sunsetMinutes = 1105 - index;
+
+      return {
+        date,
+        isToday: today,
+        day: dayLabelFromIso(date),
+        dateLabel: shortDateFromIso(date),
+        // Today comes straight from the hourly series, so the 7-day curves and the
+        // 24 h curves describe the same weather.
+        tempMax: today ? Math.max(...hourly.map((entry) => entry.temp)) : baseTemp + 5 + drift + swing,
+        tempMin: today ? Math.min(...hourly.map((entry) => entry.temp)) : baseTemp - 3 + drift + swing,
+        condition: dayCondition,
+        icon: iconEmoji(kind),
+        iconKind: kind,
+        rainProb: today ? todayRain.peakProb : outlook.chance,
+        rainfall: today ? todayRain.totalRainfall : outlook.rainfall,
+        windSpeed: today ? Math.max(...hourly.map((entry) => entry.wind)) : Math.max(4, windAtHour(12) + drift * 2 + swing),
+        windGust: today
+          ? Math.max(...hourly.map((entry) => entry.windGust))
+          : Math.max(9, windAtHour(12) + drift * 2 + swing + 10),
+        humidity: today
+          ? Math.round(hourly.reduce((sum, entry) => sum + entry.humidity, 0) / hourly.length)
+          : Math.round(Math.min(95, Math.max(35, humidityAtHour(12) + (outlook.chance - 40) / 4))),
+        uvIndex: today ? Math.max(...hourly.map((entry) => entry.uvIndex)) : Math.round(4 + noise(index * 3) * 6),
+        sunrise: clockLabel(sunriseMinutes),
+        sunset: clockLabel(sunsetMinutes),
+        daylight: formatDuration((sunsetMinutes - sunriseMinutes) * 60),
+      };
+    });
+
+    /* Everything the current observation reports comes from the same first hourly
+       entry, so the big card and the hourly strip can never disagree. */
+    const now = hourly[0];
 
     return {
       city: city.name,
@@ -833,41 +954,43 @@ class WeatherService {
       lng: city.lng,
       timezone: city.timezone,
       timezoneAbbr: '',
-      utcOffsetSeconds: offsetForTimezoneGuess(city.timezone),
+      utcOffsetSeconds,
       localTime: clock.time,
       localDate: `${clock.weekday}, ${clock.date}`,
       localMinutes: clock.minutes,
-      temperature: temp,
-      feelsLike: temp + 1,
-      tempMin: temp - 4,
-      tempMax: temp + 3,
-      condition,
-      icon: iconEmoji(kind),
-      iconKind: kind,
-      isDay: clock.minutes >= 360 && clock.minutes < 1140,
-      humidity: 62,
-      dewPoint: temp - 5,
-      windSpeed: 12,
-      windGust: 20,
-      windDirection: 180,
-      windDirectionText: 'S',
-      visibility: 10,
-      pressure: 1013,
-      pressureMsl: 1015,
-      cloudCover: 40,
-      uvIndex: 5,
-      sunrise: '6:00 AM',
-      sunset: '6:30 PM',
-      sunriseMinutes: 360,
-      sunsetMinutes: 1110,
-      solarNoon: '12:15 PM',
-      dayLength: '12h 30m',
-      dayProgress: 0.5,
+      temperature: now.temp,
+      feelsLike: now.feelsLike,
+      tempMin: forecast[0].tempMin,
+      tempMax: forecast[0].tempMax,
+      condition: now.condition,
+      icon: now.icon,
+      iconKind: now.iconKind,
+      isDay: now.isDay,
+      humidity: now.humidity,
+      dewPoint: now.dewPoint,
+      windSpeed: now.wind,
+      windGust: now.windGust,
+      windDirection: now.windDirection,
+      windDirectionText: getWindDirectionText(now.windDirection),
+      visibility: Math.round((6 + noise(nowHour + 7) * 8) * 10) / 10,
+      pressure: now.pressure,
+      pressureMsl: now.pressure + 2,
+      cloudCover: Math.min(100, Math.max(0, Math.round(now.precipProb * 1.1 + 12))),
+      uvIndex: now.uvIndex,
+      sunrise: forecast[0].sunrise,
+      sunset: forecast[0].sunset,
+      sunriseMinutes: 355,
+      sunsetMinutes: 1105,
+      solarNoon: clockLabel(Math.round((355 + 1105) / 2)),
+      dayLength: forecast[0].daylight,
+      dayProgress: Math.min(1, Math.max(0, (clock.minutes - 355) / (1105 - 355))),
       moonPhase: moon.name,
       moonPhaseIcon: moon.icon,
       moonIllumination: moon.illumination,
-      rainProbability: 20,
-      rainfall: 0,
+      rainProbability: now.precipProb,
+      rainfall: now.rainfall,
+      isSample: true,
+      todayRain,
       hourly,
       forecast,
       alerts: [],
@@ -887,6 +1010,20 @@ class WeatherService {
 /*  Small local helpers                                                       */
 /* -------------------------------------------------------------------------- */
 
+/** Day shapes for the offline week, from driest to wettest. */
+const FALLBACK_DAY_CONDITIONS: Array<{ condition: WeatherCondition; chance: number; rainfall: number }> = [
+  { condition: 'Sunny', chance: 6, rainfall: 0 },
+  { condition: 'Sunny', chance: 11, rainfall: 0 },
+  { condition: 'Partly Cloudy', chance: 19, rainfall: 0 },
+  { condition: 'Partly Cloudy', chance: 24, rainfall: 0 },
+  { condition: 'Cloudy', chance: 34, rainfall: 0 },
+  { condition: 'Cloudy', chance: 40, rainfall: 0 },
+  { condition: 'Overcast', chance: 50, rainfall: 0.7 },
+  { condition: 'Light Rain', chance: 63, rainfall: 3.6 },
+  { condition: 'Light Rain', chance: 72, rainfall: 5.4 },
+  { condition: 'Rain', chance: 86, rainfall: 12.2 },
+];
+
 function countryCodeToFlag(code: string): string {
   if (!code || code.length !== 2) return '🌍';
   return String.fromCodePoint(
@@ -897,9 +1034,27 @@ function countryCodeToFlag(code: string): string {
   );
 }
 
-/** Crude UTC-offset estimate used only by the offline fallback path. */
-function offsetForTimezoneGuess(timezone: string): number {
-  const known: Record<string, number> = {
+/**
+ * The city's current UTC offset in seconds, for the offline path.
+ *
+ * Resolved through the browser's IANA database first so daylight saving is
+ * respected and *any* city — including one that only exists because the user
+ * searched for it — gets a correct clock; the table below is a safety net for
+ * the rare zone the runtime does not know.
+ */
+function offsetSecondsForZone(timezone: string): number {
+  if (timezone && timezone !== 'auto') {
+    try {
+      return zoneOffsetMinutes(new Date(), timezone) * 60;
+    } catch {
+      /* unknown zone — fall back to the table */
+    }
+  }
+  return KNOWN_TIMEZONE_OFFSETS[timezone] ?? 0;
+}
+
+/** Winter offsets for the bundled cities, used only if Intl cannot resolve the zone. */
+const KNOWN_TIMEZONE_OFFSETS: Record<string, number> = {
     'Asia/Kolkata': 19800,
     'Asia/Tokyo': 32400,
     'Asia/Seoul': 32400,
@@ -938,9 +1093,7 @@ function offsetForTimezoneGuess(timezone: string): number {
     'Australia/Melbourne': 36000,
     'Australia/Brisbane': 36000,
     'Australia/Perth': 28800,
-    'Pacific/Auckland': 43200,
-  };
-  return known[timezone] ?? 0;
-}
+  'Pacific/Auckland': 43200,
+};
 
 export const weatherService = new WeatherService();

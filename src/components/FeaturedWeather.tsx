@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import {
   AlertTriangle,
+  CloudRain,
   Droplets,
   Eye,
   Gauge,
@@ -14,7 +15,8 @@ import {
 } from 'lucide-react';
 import { useWeatherContext } from '../context/WeatherContext';
 import { useLocalClock, useWeather } from '../hooks/useWeather';
-import { formatTemp, formatTempBare, generateWeatherAlerts, getUVCategory } from '../utils/helpers';
+import { formatTemp, formatTempBare, generateWeatherAlerts, getUVCategory, RAIN_THRESHOLD } from '../utils/helpers';
+import { RainOutlook } from '../types/weather';
 import WeatherMetrics from './WeatherMetrics';
 import WeatherIcon from './WeatherIcon';
 import GlassCard from './GlassCard';
@@ -349,9 +351,14 @@ export default function FeaturedWeather() {
                 </div>
               </div>
 
+              {/* ---------------------------- rain today ------------------------ */}
+              <RainTodaySection outlook={data.todayRain} />
+
               <div className="mt-4 flex items-center gap-1.5 text-[11px] text-faint">
                 <Info className="h-3 w-3" />
-                Updated {data.lastUpdated} local time · auto-refreshes every 10 minutes
+                {data.isSample
+                  ? `Sample data for ${data.lastUpdated} local time — the live feed is unreachable, so these figures are placeholders. Retrying every 10 minutes.`
+                  : `Updated ${data.lastUpdated} local time · auto-refreshes every 10 minutes`}
               </div>
             </div>
           </GlassCard>
@@ -383,6 +390,174 @@ function MetricBadge({
         <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-faint">{label}</div>
         <div className="truncate text-sm font-bold text-slate-900 dark:text-white">{value}</div>
         {hint && <div className="truncate text-[10px] text-faint">{hint}</div>}
+      </div>
+    </div>
+  );
+}
+
+const RAIN_STATUS = {
+  now: { label: 'Raining now', tone: 'bg-sky-500/25 text-sky-700 dark:text-sky-200' },
+  next: { label: 'Next up', tone: 'bg-indigo-500/20 text-indigo-700 dark:text-indigo-300' },
+  later: { label: 'Later today', tone: 'bg-slate-500/15 text-soft' },
+  past: { label: 'Passed', tone: 'bg-slate-500/10 text-faint' },
+} as const;
+
+/**
+ * When it might rain today, in the city's own local time: a bar for every hour of
+ * the calendar day (00:00 → 23:00, past hours dimmed) plus the wet spells spelled
+ * out as start → end timings.
+ */
+function RainTodaySection({ outlook }: { outlook: RainOutlook }) {
+  const { slots, windows, peakProb, totalRainfall, currentlyRaining, nextWindow } = outlook;
+  const nowHour = slots.find((slot) => slot.isNow)?.hour ?? -1;
+  const maxProb = Math.max(RAIN_THRESHOLD + 10, ...slots.map((slot) => slot.precipProb));
+  const barHeight = (prob: number) => Math.max(3, Math.round((prob / maxProb) * 46));
+
+  const headline = currentlyRaining
+    ? 'Raining right now'
+    : nextWindow
+      ? `Next wet spell around ${nextWindow.startLabel}`
+      : windows.length
+        ? "All of today's rain has already passed"
+        : 'No rain expected at any point today';
+
+  return (
+    <div className="glass-inset mt-6 p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2.5">
+          <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500/25 to-indigo-500/10">
+            <CloudRain className="h-4 w-4 text-sky-500" />
+            {currentlyRaining && (
+              <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-ping rounded-full bg-sky-400" />
+            )}
+          </span>
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-faint">
+              Rain timings · today
+            </div>
+            <div className="text-xs font-semibold text-slate-900 dark:text-white">{headline}</div>
+          </div>
+        </div>
+
+        <span className="tabular rounded-full bg-sky-500/15 px-3 py-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300">
+          {windows.length === 0
+            ? 'Dry day'
+            : `${windows.length} ${windows.length === 1 ? 'window' : 'windows'} · peak ${peakProb}%`}
+        </span>
+      </div>
+
+      {/* every hour of the local day, 12 AM → 11 PM */}
+      <div className="relative h-[52px]">
+        <div className="absolute inset-0 flex items-end gap-[2px]">
+          {slots.map((slot) => {
+            const wet = slot.precipProb >= RAIN_THRESHOLD;
+            const height = barHeight(slot.precipProb);
+            return (
+              <div
+                key={slot.time}
+                className="relative flex-1"
+                title={`${slot.label} · ${slot.precipProb}% chance${slot.rainfall > 0 ? ` · ${slot.rainfall} mm` : ''}`}
+              >
+                <div
+                  className={`absolute bottom-0 w-full rounded-t-[3px] ${
+                    wet ? 'bg-gradient-to-t from-sky-500 to-cyan-400' : 'bg-slate-400/35'
+                  } ${slot.isPast ? 'opacity-30' : ''}`}
+                  style={{ height: `${height}px` }}
+                />
+                {wet && (
+                  <span
+                    className="tabular absolute w-full text-center text-[8px] font-semibold text-sky-600 dark:text-sky-300"
+                    style={{ bottom: `${height + 1}px` }}
+                  >
+                    {slot.precipProb}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* anything above this line is an hour that might rain */}
+        <div
+          className="pointer-events-none absolute inset-x-0 border-t border-dashed border-slate-400/50 dark:border-slate-500/45"
+          style={{ bottom: `${(RAIN_THRESHOLD / maxProb) * 46}px` }}
+        >
+          <span className="tabular absolute -top-[9px] left-0 rounded bg-white/70 px-1 text-[8px] font-bold uppercase tracking-wide text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
+            {RAIN_THRESHOLD}% chance
+          </span>
+        </div>
+
+        {/* the current hour, so "might rain later" is read against a real clock */}
+        {nowHour >= 0 && (
+          <div
+            className="pointer-events-none absolute bottom-0 top-0 w-px bg-slate-900/25 dark:bg-white/40"
+            style={{ left: `${((nowHour + 0.5) / 24) * 100}%` }}
+          >
+            <span className="absolute -top-1.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-slate-900/60 dark:bg-white/70" />
+          </div>
+        )}
+      </div>
+
+      <div className="relative mt-1 h-3.5">
+        {slots
+          .filter((slot) => slot.hour % 6 === 0)
+          .map((slot) => (
+            <span
+              key={slot.time}
+              className="tabular absolute -translate-x-1/2 text-[9px] text-faint"
+              style={{ left: `${((slot.hour + 0.5) / 24) * 100}%` }}
+            >
+              {slot.label}
+            </span>
+          ))}
+      </div>
+
+      {/* the wet spells themselves, start → end */}
+      {windows.length > 0 ? (
+        <ul className="mt-3 space-y-1.5">
+          {windows.map((window) => {
+            const status = window.isNow
+              ? 'now'
+              : window.isPast
+                ? 'past'
+                : window === nextWindow
+                  ? 'next'
+                  : 'later';
+            return (
+              <li
+                key={window.startTime}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-white/45 bg-white/40 px-3 py-2 dark:border-slate-700/40 dark:bg-slate-800/35"
+              >
+                <span className="flex min-w-[7.5rem] items-center gap-1.5 text-[13px] font-bold text-slate-900 dark:text-white">
+                  <Droplets className="h-3.5 w-3.5 shrink-0 text-sky-500" />
+                  <span className="tabular">
+                    {window.hours === 1 ? window.startLabel : `${window.startLabel} – ${window.endLabel}`}
+                  </span>
+                </span>
+                <span className="tabular text-[11px] text-soft">
+                  up to {window.peakProb}% · {window.hours} h
+                  {window.totalRainfall > 0 ? ` · ${window.totalRainfall} mm` : ''}
+                </span>
+                <span
+                  className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${RAIN_STATUS[status].tone}`}
+                >
+                  {RAIN_STATUS[status].label}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="mt-3 rounded-xl border border-white/45 bg-white/35 px-3 py-2 text-[11px] text-soft dark:border-slate-700/40 dark:bg-slate-800/35">
+          Not one hour today reaches the {RAIN_THRESHOLD}% chance threshold — the umbrella can stay folded.
+        </p>
+      )}
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-faint">
+        <span>Local day · 12 AM to 11 PM</span>
+        <span>Peak chance {peakProb}%</span>
+        {totalRainfall > 0 && <span>{totalRainfall} mm expected</span>}
+        <span>Dashed line marks the {RAIN_THRESHOLD}% threshold</span>
       </div>
     </div>
   );

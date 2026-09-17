@@ -200,6 +200,13 @@ export interface WeatherData {
   /** Full picture of today's rain, including hours that have already passed. */
   todayRain: RainOutlook;
 
+  /**
+   * true when the live API could not be reached and these figures are the
+   * offline placeholder set — the UI says so rather than passing them off as
+   * real weather.
+   */
+  isSample: boolean;
+
   hourly: HourlyForecast[];
   forecast: DayForecast[];
   alerts: WeatherAlert[];

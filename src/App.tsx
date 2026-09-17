@@ -1,5 +1,5 @@
 import { motion, useScroll, useSpring } from 'framer-motion';
-import { ArrowUp } from 'lucide-react';
+import { AlertTriangle, ArrowUp, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { WeatherProvider, useWeatherContext } from './context/WeatherContext';
 import { useWeather } from './hooks/useWeather';
@@ -33,6 +33,7 @@ function AppShell() {
       <ParallaxBackground condition={condition} isDay={isDay} theme={theme} />
       <ScrollProgress />
       <Header />
+      {data?.isSample && <SampleDataNotice />}
 
       <main className="relative">
         <Hero />
@@ -82,6 +83,39 @@ function AppShell() {
 
       <Footer />
       <BackToTop />
+    </div>
+  );
+}
+
+/**
+ * The live API could not be reached, so every panel below is showing the offline
+ * placeholder set. Say so plainly — identical numbers all week, flat charts and a
+ * day icon after dark are otherwise baffling rather than obviously synthetic.
+ */
+function SampleDataNotice() {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+
+  return (
+    <div className="fixed inset-x-0 top-20 z-40 px-3 sm:px-4">
+      <div
+        role="status"
+        className="mx-auto flex max-w-7xl items-center gap-2 rounded-2xl border border-amber-400/50 bg-amber-100/90 px-3.5 py-1.5 text-[11px] font-medium text-amber-900 shadow-glass backdrop-blur-xl dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200"
+      >
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+        <span className="flex-1">
+          <strong className="font-bold">Showing sample data.</strong> The live Open-Meteo feed is
+          unavailable right now, so these figures are generated placeholders — not real weather.
+        </span>
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          aria-label="Dismiss sample data notice"
+          className="shrink-0 rounded-lg p-1 transition-colors hover:bg-amber-500/20"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 }
