@@ -30,10 +30,44 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # `vite.config.ts` derives the base path from GITHUB_REPOSITORY, which
+      # Actions sets automatically: project sites are served from /<repo>/ and
+      # <owner>.github.io sites from the root. Nothing to configure here.
       - name: Build
         run: npm run build
+
+      # A wrong base path is the classic Pages failure: index.html loads, every
+      # /assets/* request 404s, and the page renders blank with no visible error.
+      # Fail loudly here instead of silently deploying a white screen.
+      - name: Verify build output
         env:
-          NODE_ENV: production
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f dist/index.html ]; then
+            echo "::error::dist/index.html was not produced"
+            exit 1
+          fi
+
+          if [ ! -f dist/.nojekyll ]; then
+            echo "::warning::dist/.nojekyll is missing — add an empty file at public/.nojekyll"
+          fi
+
+          if [ "$REPO_NAME" = "${REPO_NAME%.github.io}" ]; then
+            EXPECTED="/${REPO_NAME}/assets/"
+          else
+            EXPECTED="/assets/"
+          fi
+
+          if ! grep -q "src=\"${EXPECTED}" dist/index.html; then
+            echo "::error::index.html does not reference ${EXPECTED} — the deployed page would load but fail to fetch its bundle."
+            echo "Referenced asset URLs:"
+            grep -oE '(src|href)="/[^"]*"' dist/index.html || true
+            exit 1
+          fi
+
+          echo "Build verified: assets are served from ${EXPECTED}"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
