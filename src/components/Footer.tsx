@@ -1,71 +1,146 @@
-import { Globe, Github, Instagram, Coffee, Smartphone } from 'lucide-react';
+import { Coffee, Github, Globe, Instagram, Smartphone } from 'lucide-react';
+import GlassCard from './GlassCard';
+
+const SECTIONS = [
+  { id: 'current-weather', label: 'Current weather' },
+  { id: 'forecast', label: 'Forecast' },
+  { id: 'insights', label: 'Trends & air' },
+  { id: 'city-grid', label: 'All cities' },
+];
 
 export default function Footer() {
   return (
-    <footer className="py-12 px-4 border-t border-slate-200 dark:border-slate-800">
-      <div className="max-w-7xl mx-auto">
-        {/* Buy Me a Coffee Section */}
-        <div className="mb-8 p-6 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white relative overflow-hidden">
-          {/* Decorative elements */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+    <footer className="relative px-4 pb-10 pt-6">
+      <div className="mx-auto max-w-7xl">
+        {/* ---------------------------- support card --------------------------- */}
+        <GlassCard tilt={3} className="mb-8 overflow-hidden p-6 sm:p-7">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-90"
+            style={{
+              background:
+                'linear-gradient(120deg, rgba(99,102,241,0.28), rgba(168,85,247,0.22) 45%, rgba(236,72,153,0.2))',
+            }}
+          />
 
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-3">
-              <Coffee className="w-8 h-8" />
-              <h3 className="text-xl md:text-2xl font-bold">Buy me a coffee for more such tools ☕</h3>
+          <div className="relative">
+            <div className="mb-2 flex items-center gap-3">
+              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-white/25 backdrop-blur-md">
+                <Coffee className="h-5 w-5 text-white" />
+              </span>
+              <h3 className="font-display text-xl font-bold text-white sm:text-2xl">
+                Buy me a coffee for more such tools ☕
+              </h3>
             </div>
-            <p className="text-white/90 mb-4">Support open source and help me build more awesome tools!</p>
+            <p className="mb-5 text-sm text-white/85">
+              This project is free, open source and ad-free. Support it and help build more weather tools.
+            </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-              <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl">
-                <Smartphone className="w-5 h-5" />
-                <span className="font-medium">Gpay / PhonePe / UPI</span>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2 rounded-2xl border border-white/25 bg-white/20 px-4 py-2 text-sm font-medium text-white backdrop-blur-md">
+                <Smartphone className="h-4 w-4" />
+                GPay / PhonePe / UPI
               </div>
-              <div className="flex flex-wrap gap-3">
+
+              <div className="flex flex-wrap items-center gap-3">
                 <a
                   href="upi://pay?pa=8017414711@yesbank&pn=RounakAd&cu=INR"
-                  className="bg-white text-slate-900 px-4 py-2 rounded-xl font-semibold hover:bg-slate-100 transition-all hover:scale-105 flex items-center gap-2"
+                  className="flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-bold text-slate-900 transition-transform duration-300 hover:scale-105"
                 >
-                  <span className="text-lg">📱</span> 8017414711
+                  <span>📱</span> 8017414711
                 </a>
-                <span className="text-white/80 self-center">or</span>
-                <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl font-mono text-sm">
+                <span className="text-xs text-white/70">or</span>
+                <span className="rounded-2xl border border-white/25 bg-white/20 px-4 py-2 font-mono text-xs text-white backdrop-blur-md">
                   8017414711@yespop
-                </div>
+                </span>
               </div>
+            </div>
+          </div>
+        </GlassCard>
+
+        {/* ------------------------------ main row ---------------------------- */}
+        <div className="grid gap-6 md:grid-cols-[1.4fr_1fr_1fr]">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500">
+                <Globe className="text-white" style={{ width: 18, height: 18 }} />
+              </span>
+              <span className="font-display text-sm font-bold text-slate-900 dark:text-white">
+                World Weather Info
+              </span>
+            </div>
+            <p className="mt-3 max-w-sm text-xs leading-relaxed text-soft">
+              Real-time conditions, air quality, precipitation and 7-day outlooks for major cities worldwide —
+              every time shown in the city's own local timezone.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2 text-[10px]">
+              <span className="chip">React 18</span>
+              <span className="chip">TypeScript</span>
+              <span className="chip">Tailwind</span>
+              <span className="chip">Framer Motion</span>
+              <span className="chip">Recharts</span>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="section-label mb-3">Explore</h4>
+            <ul className="space-y-2">
+              {SECTIONS.map((section) => (
+                <li key={section.id}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }
+                    className="text-xs font-medium text-soft transition-colors hover:text-indigo-500"
+                  >
+                    {section.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="section-label mb-3">Connect</h4>
+            <div className="flex flex-col gap-2">
+              <a
+                href="https://instagram.com/ig_chromozome"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-xl border border-white/40 bg-gradient-to-r from-purple-500 to-pink-500 px-3 py-2 text-xs font-semibold text-white transition-transform duration-300 hover:scale-[1.03] dark:border-slate-700/40"
+              >
+                <Instagram className="h-3.5 w-3.5" />
+                @ig_chromozome
+              </a>
+              <a
+                href="https://open-meteo.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/45 px-3 py-2 text-xs font-medium text-soft backdrop-blur-md transition-colors hover:text-indigo-500 dark:border-slate-700/40 dark:bg-slate-800/45"
+              >
+                <Github className="h-3.5 w-3.5" />
+                Weather data: Open-Meteo
+              </a>
             </div>
           </div>
         </div>
 
-        {/* Main Footer */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Globe className="w-5 h-5 text-indigo-500" />
-            <span className="font-semibold text-slate-900 dark:text-white">World Weather Info</span>
-          </div>
+        <div className="divider my-6" />
 
-          <div className="flex items-center gap-4">
-            <a
-              href="https://instagram.com/ig_chromozome"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 transition-opacity"
-            >
-              <Instagram className="w-4 h-4" />
-              <span className="text-sm font-medium">@ig_chromozome</span>
-            </a>
+        <div className="flex flex-col items-center justify-between gap-3 text-xs text-soft md:flex-row">
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <span>
+              Created by <strong className="font-semibold text-slate-700 dark:text-slate-200">Rounak Adhikary</strong>
+            </span>
+            <span className="text-faint">•</span>
+            <span>
+              Powered by <strong className="font-semibold text-slate-700 dark:text-slate-200">Soumili Das</strong>
+            </span>
           </div>
-
-          <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-            <span>Created by <strong className="text-slate-700 dark:text-slate-300">Rounak Adhikary</strong></span>
-            <span className="hidden md:inline">•</span>
-            <span>Powered by <strong className="text-slate-700 dark:text-slate-300">Soumili Das</strong></span>
-          </div>
-        </div>
-
-        <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400 dark:text-slate-500">
-          © {new Date().getFullYear()} World Weather Info. All rights reserved.
+          <span className="text-faint">
+            © {new Date().getFullYear()} World Weather Info. All rights reserved.
+          </span>
         </div>
       </div>
     </footer>

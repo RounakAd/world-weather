@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
-import { Globe, Search, Sun, Moon, Thermometer, Menu, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Globe, Menu, Moon, Sun, Thermometer, X } from 'lucide-react';
 import { useWeatherContext } from '../context/WeatherContext';
 import { continents } from '../data/cities';
+import CitySearch from './CitySearch';
+import { cn } from '../utils/helpers';
 
 export default function Header() {
   const {
@@ -9,172 +12,230 @@ export default function Header() {
     toggleUnit,
     theme,
     toggleTheme,
-    searchQuery,
-    setSearchQuery,
     selectedContinent,
     setSelectedContinent,
+    selectedCity,
+    searchQuery,
   } = useWeatherContext();
 
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
-    };
-    window.addEventListener('scroll', handleScroll);
+    const handleScroll = () => setScrolled(window.scrollY > 24);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [selectedCity.name]);
+
+  const filters = ['All Cities', ...continents];
+
   return (
-    <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? 'bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl shadow-lg'
-          : 'bg-transparent'
-      }`}
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-16">
+    <header className="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-4">
+      <motion.div
+        initial={false}
+        animate={{ opacity: 1 }}
+        className={cn(
+          'mx-auto max-w-7xl rounded-2xl border backdrop-blur-2xl transition-[background-color,box-shadow,border-color] duration-500 ease-silk',
+          scrolled
+            ? 'border-white/50 bg-white/70 shadow-glass-lg dark:border-slate-700/50 dark:bg-slate-900/65'
+            : 'border-transparent bg-transparent',
+        )}
+      >
+        <div className="flex h-16 items-center justify-between gap-3 px-3 sm:px-4">
           {/* Logo */}
-          <div className="flex items-center gap-2">
-            <Globe className="w-8 h-8 text-indigo-500" />
-            <span className="text-lg font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
-              World Weather Info
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="group flex shrink-0 items-center gap-2.5"
+          >
+            <span className="relative grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 shadow-lg shadow-indigo-500/30">
+              <Globe className="h-5 w-5 text-white transition-transform duration-500 group-hover:rotate-[18deg]" />
+              <span className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/40" />
             </span>
-          </div>
+            <span className="hidden flex-col leading-none sm:flex">
+              <span className="font-display text-[15px] font-bold tracking-tight text-slate-900 dark:text-white">
+                World Weather
+              </span>
+              <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-faint">
+                Aurora Glass
+              </span>
+            </span>
+          </button>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center gap-2">
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search city..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 w-48 focus:w-64 transition-all outline-none text-sm"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Continent filters */}
-            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
-              {['All Cities', ...continents].map((continent) => (
+          {/* Desktop nav */}
+          <nav className="hidden items-center gap-2 xl:flex">
+            <div className="hidden items-center gap-1 rounded-xl border border-white/40 bg-white/40 p-1 backdrop-blur-md lg:flex dark:border-slate-700/40 dark:bg-slate-800/40">
+              {filters.map((continent) => (
                 <button
                   key={continent}
+                  type="button"
                   onClick={() => setSelectedContinent(continent)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  className={cn(
+                    'relative shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-colors duration-200',
                     selectedContinent === continent
-                      ? 'bg-white dark:bg-slate-700 text-indigo-500 shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                  }`}
+                      ? 'text-white'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
+                  )}
                 >
-                  {continent === 'All Cities' ? '🌍' : ''} {continent}
+                  {selectedContinent === continent && (
+                    <motion.span
+                      layoutId="continent-pill"
+                      className="absolute inset-0 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 shadow-md shadow-indigo-500/30"
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                    />
+                  )}
+                  <span className="relative flex items-center gap-1">
+                    {continent === 'All Cities' ? (
+                      <>
+                        <Globe className="h-3 w-3" /> All
+                      </>
+                    ) : (
+                      continent
+                    )}
+                  </span>
                 </button>
               ))}
             </div>
 
-            {/* Unit toggle */}
+            <CitySearch variant="desktop" />
+
             <button
+              type="button"
               onClick={toggleUnit}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+              aria-label={`Switch to degrees ${unit === 'C' ? 'Fahrenheit' : 'Celsius'}`}
+              className="flex items-center gap-1.5 rounded-xl border border-white/40 bg-white/45 px-3 py-2 text-sm font-semibold text-slate-700 backdrop-blur-md transition-all hover:bg-white/70 dark:border-slate-700/40 dark:bg-slate-800/45 dark:text-slate-200 dark:hover:bg-slate-700/60"
             >
-              <Thermometer className="w-4 h-4" />
-              <span className="text-sm font-medium">°{unit}</span>
+              <Thermometer className="h-4 w-4" />
+              °{unit}
             </button>
 
-            {/* Theme toggle */}
             <button
+              type="button"
               onClick={toggleTheme}
-              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
-              aria-label="Toggle theme"
+              aria-label="Toggle colour theme"
+              className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-xl border border-white/40 bg-white/45 backdrop-blur-md transition-all hover:bg-white/70 dark:border-slate-700/40 dark:bg-slate-800/45 dark:hover:bg-slate-700/60"
             >
-              {theme === 'light' ? (
-                <Moon className="w-5 h-5" />
-              ) : (
-                <Sun className="w-5 h-5 text-amber-500" />
-              )}
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={theme}
+                  initial={{ y: 14, opacity: 0, rotate: -40 }}
+                  animate={{ y: 0, opacity: 1, rotate: 0 }}
+                  exit={{ y: -14, opacity: 0, rotate: 40 }}
+                  transition={{ duration: 0.25 }}
+                  className="grid place-items-center"
+                >
+                  {theme === 'light' ? (
+                    <Moon className="h-4 w-4 text-slate-700" />
+                  ) : (
+                    <Sun className="h-4 w-4 text-amber-400" />
+                  )}
+                </motion.span>
+              </AnimatePresence>
             </button>
           </nav>
 
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-800"
-            aria-label="Toggle menu"
-          >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+          {/* Compact controls (tablet + mobile) */}
+          <div className="flex items-center gap-2 xl:hidden">
+            <div className="hidden w-44 sm:block md:w-56 lg:w-64">
+              <CitySearch variant="desktop" />
+            </div>
+            <button
+              type="button"
+              onClick={toggleUnit}
+              className="flex items-center gap-1 rounded-xl border border-white/40 bg-white/45 px-2.5 py-2 text-xs font-semibold text-slate-700 backdrop-blur-md dark:border-slate-700/40 dark:bg-slate-800/45 dark:text-slate-200"
+            >
+              °{unit}
+            </button>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label="Toggle colour theme"
+              className="grid h-9 w-9 place-items-center rounded-xl border border-white/40 bg-white/45 backdrop-blur-md dark:border-slate-700/40 dark:bg-slate-800/45"
+            >
+              {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4 text-amber-400" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              aria-label="Toggle navigation menu"
+              className="grid h-9 w-9 place-items-center rounded-xl border border-white/40 bg-white/45 backdrop-blur-md sm:hidden dark:border-slate-700/40 dark:bg-slate-800/45"
+            >
+              {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
 
-        {/* Mobile menu */}
-        {mobileMenuOpen && (
-          <div className="lg:hidden py-4 space-y-4 border-t border-slate-200 dark:border-slate-800">
-            {/* Mobile search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search city..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 outline-none"
-              />
-            </div>
+        {/* Mobile drawer */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              className="overflow-hidden border-t border-white/30 sm:hidden dark:border-slate-700/30"
+            >
+              <div className="space-y-3 px-3 py-3">
+                <CitySearch variant="mobile" onNavigate={() => setMobileMenuOpen(false)} />
+                <div className="flex flex-wrap gap-2">
+                  {filters.map((continent) => (
+                    <button
+                      key={continent}
+                      type="button"
+                      onClick={() => {
+                        setSelectedContinent(continent);
+                        setMobileMenuOpen(false);
+                      }}
+                      className={cn(
+                        'rounded-full px-3 py-1.5 text-xs font-medium transition-all',
+                        selectedContinent === continent
+                          ? 'bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-md shadow-indigo-500/30'
+                          : 'border border-white/40 bg-white/45 text-slate-600 dark:border-slate-700/40 dark:bg-slate-800/45 dark:text-slate-300',
+                      )}
+                    >
+                      {continent}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-            {/* Mobile continent filters */}
-            <div className="flex flex-wrap gap-2">
-              {['All Cities', ...continents].map((continent) => (
-                <button
-                  key={continent}
-                  onClick={() => {
-                    setSelectedContinent(continent);
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                    selectedContinent === continent
-                      ? 'bg-indigo-500 text-white'
-                      : 'bg-slate-100 dark:bg-slate-800'
-                  }`}
-                >
-                  {continent}
-                </button>
-              ))}
-            </div>
-
-            {/* Mobile controls */}
-            <div className="flex items-center gap-3">
+        {/* Continent strip for medium screens */}
+        <div className="hidden border-t border-white/20 px-3 pb-2 pt-1 xl:hidden lg:block dark:border-slate-700/20">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+            {filters.map((continent) => (
               <button
-                onClick={toggleUnit}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800"
-              >
-                <Thermometer className="w-4 h-4" />
-                <span className="text-sm font-medium">°{unit}</span>
-              </button>
-              <button
-                onClick={toggleTheme}
-                className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800"
-                aria-label="Toggle theme"
-              >
-                {theme === 'light' ? (
-                  <Moon className="w-5 h-5" />
-                ) : (
-                  <Sun className="w-5 h-5 text-amber-500" />
+                key={continent}
+                type="button"
+                onClick={() => setSelectedContinent(continent)}
+                className={cn(
+                  'shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium transition-all',
+                  selectedContinent === continent
+                    ? 'bg-gradient-to-br from-indigo-500 to-violet-500 text-white'
+                    : 'text-slate-600 hover:bg-white/50 dark:text-slate-400 dark:hover:bg-slate-800/50',
                 )}
+              >
+                {continent}
               </button>
-            </div>
+            ))}
           </div>
-        )}
-      </div>
+        </div>
+      </motion.div>
+
+      {searchQuery.trim().length > 0 && (
+        <div className="pointer-events-none mx-auto mt-2 max-w-7xl">
+          <span className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/70 px-3 py-1 text-[11px] font-medium text-slate-600 backdrop-blur-md dark:border-slate-700/40 dark:bg-slate-800/70 dark:text-slate-300">
+            Filtering the grid by “{searchQuery}”
+          </span>
+        </div>
+      )}
     </header>
   );
 }

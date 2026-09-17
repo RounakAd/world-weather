@@ -1,170 +1,115 @@
-# 🌍 World Weather Info
+# 🌍 World Weather Info — Aurora Glass
 
-A beautiful, modern weather dashboard showing real-time weather conditions, air quality, and precipitation forecasts for 50 major cities around the world.
+An immersive, glassmorphic weather dashboard covering 50 featured cities across six continents, plus
+on-demand weather for **any city on earth** via live geocoding. Every timestamp is resolved to the
+city's own timezone, not the visitor's.
 
-![World Weather Info](https://img.shields.io/badge/React-18-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue) ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-blue) ![Vite](https://img.shields.io/badge/Vite-6-purple)
-
-## ✨ Features
-
-- **50 Cities Worldwide** - Comprehensive coverage across Asia, Europe, North America, South America, Africa, and Oceania
-- **Real-time Weather Data** - Powered by Open-Meteo API (free, no API key required)
-- **Air Quality Index** - Live AQI data with pollutant breakdown
-- **7-Day Forecast** - Detailed daily forecasts with expandable details
-- **Hourly Forecast** - 24-hour weather predictions
-- **Weather Trends** - Interactive charts for temperature, rainfall, wind, and humidity
-- **Rainfall Visualization** - Weekly precipitation charts and statistics
-- **Dark/Light Mode** - Premium dark mode with glassmorphism design
-- **Celsius/Fahrenheit Toggle** - Switch between units instantly
-- **Responsive Design** - Works beautifully on desktop, tablet, and mobile
-- **City Search** - Quick search across all 50 cities
-- **Continent Filtering** - Filter cities by continent
-- **Favorites** - Save your favorite cities
-- **GitHub Pages Ready** - One-click deployment via GitHub Actions
-
-## 🚀 Tech Stack
-
-- **React 18** - Modern React with hooks
-- **TypeScript** - Type-safe development
-- **Vite** - Fast build tool
-- **Tailwind CSS** - Utility-first CSS
-- **Framer Motion** - Smooth animations
-- **Recharts** - Interactive charts
-- **Lucide React** - Beautiful icons
-- **Open-Meteo API** - Free weather API
-
-## 📦 Install & Run
-
-```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-```
-
-## 🌐 GitHub Pages Deployment
-
-### Option 1: GitHub Actions (Recommended)
-
-1. **Fork or upload this repository to GitHub**
-
-2. **Enable GitHub Pages:**
-   - Go to your repository **Settings**
-   - Navigate to **Pages** in the sidebar
-   - Under **Source**, select **GitHub Actions**
-
-3. **Push to main branch:**
-   - The workflow will automatically build and deploy
-
-4. **Access your site:**
-   - Your site will be available at: `https://<username>.github.io/<repository-name>/`
-
-### Option 2: Manual Deployment
-
-```bash
-# Build the project
-npm run build
-
-# The dist folder contains your static files
-# Upload to GitHub Pages or any static hosting
-```
-
-### Configuring the Base Path
-
-If deploying to a subdirectory (not username.github.io), update `vite.config.ts`:
-
-```typescript
-// For: https://username.github.io/my-weather-app/
-base: '/my-weather-app/',
-```
-
-## ⚙️ Environment Variables
-
-Create a `.env` file if you want to use additional API features:
-
-```env
-# Optional: Weather API key (uses Open-Meteo free API by default)
-VITE_WEATHER_API_KEY=
-
-# Optional: Air Quality API key (uses Open-Meteo AQI by default)
-VITE_AQI_API_KEY=
-```
-
-## 🎨 Design
-
-The app features a premium glassmorphism design with:
-
-- Smooth glass effects and backdrop blur
-- Gradient backgrounds that adapt to weather conditions
-- Animated weather icons
-- Responsive grid layouts
-- Beautiful chart visualizations
-- Dark mode with soft highlights
-
-## 📱 Responsive Breakpoints
-
-- **Mobile**: 320px - 767px (single column)
-- **Tablet**: 768px - 1023px (2 columns)
-- **Desktop**: 1024px - 1439px (multi-column)
-- **Large Desktop**: 1440px+ (full dashboard)
-
-## 🔧 API Integration
-
-The app uses **Open-Meteo** for weather data:
-
-- Current weather conditions
-- Hourly forecasts (24 hours)
-- 7-day forecasts
-- Air quality data (AQI, PM2.5, PM10, etc.)
-- Sunrise/sunset times
-
-No API key required! Open-Meteo is free and open source.
-
-## 📁 Project Structure
-
-```
-src/
-├── components/       # React components
-│   ├── Header.tsx
-│   ├── Hero.tsx
-│   ├── FeaturedWeather.tsx
-│   ├── WeatherMetrics.tsx
-│   ├── HourlyForecast.tsx
-│   ├── SevenDayForecast.tsx
-│   ├── AirQuality.tsx
-│   ├── WindCard.tsx
-│   ├── SunMoon.tsx
-│   ├── WeatherTrends.tsx
-│   ├── PrecipitationChart.tsx
-│   ├── WeatherAdvice.tsx
-│   ├── CityCard.tsx
-│   ├── CityGrid.tsx
-│   ├── GlobalMap.tsx
-│   └── Footer.tsx
-├── context/          # React context
-├── data/             # Static data
-├── hooks/            # Custom hooks
-├── services/         # API services
-├── types/            # TypeScript types
-└── utils/            # Utility functions
-```
-
-## 🌟 Credits
-
-- Weather data: [Open-Meteo](https://open-meteo.com/)
-- Icons: [Lucide React](https://lucide.dev/)
-- Charts: [Recharts](https://recharts.org/)
-
-## 📄 License
-
-MIT License - feel free to use this project for personal or commercial purposes.
+![React](https://img.shields.io/badge/React-18-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue) ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38bdf8) ![Vite](https://img.shields.io/badge/Vite-6-purple)
 
 ---
 
-Built with ❤️ for weather enthusiasts worldwide
+## ✨ What's inside
+
+### Immersive 3D presentation
+- **Five-layer parallax background** — the sky gradient, celestial body, star field, aurora blobs and
+  drifting clouds all move at different rates against both scroll and pointer movement.
+- **Weather-reactive ambience** — the entire palette shifts with the selected city's condition and
+  day/night state, and follows the light/dark theme.
+- **Real 3D glass cards** — pointer-tracked tilt with spring physics, a travelling specular highlight,
+  layered rims and depth-sorted content.
+- **Animated 3D globe** in the hero with orbiting rings, a rotating graticule and a counter-rotating
+  satellite marker.
+- Scroll progress bar, glass header that condenses on scroll, and reveal animations throughout.
+
+### Accurate, timezone-correct data
+- **Local-time everything.** The hourly timeline is indexed against the API's own local ISO timestamps
+  and the city's UTC offset — so a forecast for Tokyo reads in JST even when you are in London.
+- **Day/night-aware iconography.** A hand-built SVG icon set where clear skies are a sun by day and a
+  moon by night, and partly-cloudy flips its celestial body after dusk.
+- **Real readings**, not placeholders: visibility, dew point, pressure (station + MSL), cloud cover,
+  UV index, wind gusts, sunrise/sunset, solar noon, daylight duration and a computed moon phase.
+- **Two batched requests** cover all 50 cities (weather + air quality) instead of one hundred, with
+  in-flight de-duplication and a 10-minute cache.
+
+### Working city search
+- Instant matches from the bundled city list, then live Open-Meteo geocoding for the rest of the world.
+- Each suggestion shows the flag, region, live temperature and the city's current local time.
+- Selecting a suggestion loads that city's full detail and scrolls the dashboard to it.
+- Full keyboard support (`↑` `↓` `Enter` `Esc`), favourites toggling from the dropdown, and a
+  "view N in grid" shortcut that filters the city grid.
+
+### A real global map
+- Genuine Natural Earth land outlines (simplified, public domain) projected equirectangularly —
+  not a hand-drawn blob.
+- Live temperature-coloured markers for every city, with a **computed day/night terminator** based on
+  the sun's current declination and hour angle.
+- Drag to pan, `+` / `−` to zoom, hover for a city card, click to load that city's forecast.
+
+### Air quality, done properly
+- A 270° radial gauge with a value marker that sits on the correct AQI band.
+- The six-band US AQI scale with a live position indicator.
+- Per-pollutant bars scaled relative to the worst pollutant and annotated with the share of the
+  WHO 24-hour guideline, plus dominant-pollutant detection and a health summary.
+
+### Everything that was already there, still there
+50-city grid, continent filters, 7-day forecast with expandable detail, precipitation statistics,
+weather trend charts, wind compass with Beaufort scale, sun/moon panel, today's outlook,
+recommendations, favourites, recently viewed, °C/°F toggle and light/dark theme.
+
+### Added for good measure
+- **Live local clock** for the selected city, ticking in the header of the detail card.
+- **Weather alerts** derived from live readings (extreme heat, damaging gusts, freezing conditions,
+  thunderstorms, low visibility, extreme UV).
+- **Activity suitability scores** for running, cycling and outdoor dining.
+- **"Best time outdoors today"** — the most comfortable three-hour daylight window.
+- **48-hour hourly timeline** with a temperature curve, precipitation probability and wind speed,
+  toggleable between 24 h and 48 h.
+- **24 h / 7 day trend toggle** across temperature, rainfall, wind and humidity.
+- **City sorting** by temperature, air quality, rain chance or name.
+- **Favourites & recently viewed bar** for one-tap city switching.
+- Offline fallback data so the interface never renders empty.
+
+---
+
+## 🚀 Getting started
+
+```bash
+npm install
+npm run dev      # dev server on http://localhost:5173
+npm run build    # type-check + production bundle into dist/
+npm run preview  # preview the production build
+```
+
+No API keys required — the app uses [Open-Meteo](https://open-meteo.com/) (forecast, air quality and
+geocoding), which is free for non-commercial use.
+
+## 🧱 Tech stack
+
+React 18 · TypeScript · Vite 6 · Tailwind CSS 3.4 · Framer Motion · Recharts · Lucide React ·
+Open-Meteo API
+
+## 🗂️ Project structure
+
+```
+src/
+  components/     UI — parallax backdrop, glass primitives, SVG weather icons, every panel
+  context/        WeatherProvider: selection, units, theme, favourites, batched summaries
+  data/           Bundled 50-city list, search helpers, generated world map paths
+  hooks/          useWeather, useAirQuality, useCitySummaries, useCitySearch, useLocalClock
+  services/       Open-Meteo client: parsing, timezone handling, batching, geocoding, caching
+  types/          Shared domain types
+  utils/          Formatting, AQI/UV/Beaufort scales, moon phase, sky palettes, narratives
+```
+
+`src/data/worldMap.ts` is generated from Natural Earth 110m land data — see the header comment in the
+file for provenance.
+
+## 🌐 Deployment
+
+The Vite config sets `base` to `/world-weather/` for production builds. Update that value (and the
+GitHub Actions workflow) if your repository has a different name. To deploy anywhere else, set
+`base` to `/`.
+
+---
+
+Created by **Rounak Adhikary** · Powered by **Soumili Das**

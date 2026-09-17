@@ -3,15 +3,37 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌍</text></svg>" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Real-time weather conditions, air quality and forecasts for 50 major cities worldwide." />
-    <meta name="theme-color" content="#1e1b4b" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="Immersive real-time weather, air quality, precipitation and 7-day forecasts for major cities worldwide — every time shown in the city's own local timezone."
+    />
+    <meta name="theme-color" content="#0b1026" />
+    <meta name="color-scheme" content="light dark" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-    <title>World Weather Info 🌍</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Sora:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <title>World Weather Info 🌍 · Aurora Glass</title>
   </head>
   <body class="antialiased">
+    <script>
+      // Apply the saved (or system) colour scheme before first paint.
+      (function () {
+        try {
+          var saved = localStorage.getItem('weather-theme');
+          var dark =
+            saved === 'dark' ||
+            (saved !== 'light' && !window.matchMedia('(prefers-color-scheme: light)').matches);
+          document.documentElement.classList.toggle('dark', dark);
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch (e) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

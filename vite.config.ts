@@ -4,9 +4,10 @@ import react from '@vitejs/plugin-react';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // For GitHub Pages: set base to '/<REPO_NAME>/' in production.
-  // Change 'website' to your actual repository name.
-  base: process.env.NODE_ENV === 'production' ? '/world-weather/' : '/',
+  // Deploys to a sub-path (e.g. GitHub Pages project sites) need a base such as
+  // '/world-weather/'. Set VITE_BASE_PATH when building for those; the default
+  // works for local preview and root-domain hosting.
+  base: process.env.VITE_BASE_PATH || '/',
   server: {
     port: 5173,
     open: true,
@@ -14,5 +15,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    chunkSizeWarningLimit: 700,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          charts: ['recharts'],
+          motion: ['framer-motion'],
+        },
+      },
+    },
   },
 });
