@@ -11,6 +11,12 @@ dist-ssr/
 
 # Scratch and generated working files
 .workbuddy-ai/tmp/
+.freebuff/preview-*.log*
+
+# One day of real weather, written by the dev server (see src/services/weatherCache.ts).
+# Regenerated on the day's first load, so it is machine output rather than source.
+data/weather-cache.json
+data/*.tmp
 
 # Editor / OS
 .vscode/*

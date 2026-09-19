@@ -5,7 +5,7 @@ import { useWeatherContext } from '../context/WeatherContext';
 import { useWeather } from '../hooks/useWeather';
 import WeatherIcon from './WeatherIcon';
 import GlassCard from './GlassCard';
-import { formatTempBare } from '../utils/helpers';
+import { describeRainEta, formatTempBare, RAIN_THRESHOLD } from '../utils/helpers';
 
 const ITEM_WIDTH = 76;
 const GAP = 8;
@@ -58,7 +58,6 @@ export default function HourlyForecast() {
 
   const warmest = points.reduce((best, point) => (point.hour.temp > best.hour.temp ? point : best), points[0]);
   const coolest = points.reduce((best, point) => (point.hour.temp < best.hour.temp ? point : best), points[0]);
-  const peakRain = hours.reduce((best, hour) => (hour.precipProb > best.precipProb ? hour : best), hours[0]);
 
   return (
     <GlassCard tilt={2} className="p-5">
@@ -104,9 +103,15 @@ export default function HourlyForecast() {
         <span>
           Coolest <strong className="font-semibold text-slate-800 dark:text-slate-200">{formatTempBare(coolest.hour.temp, unit)}</strong> at {coolest.hour.label}
         </span>
+        {/* The same "when does it next rain" answer the rain timeline and the
+            precipitation chart show — one time and one percentage, not three. */}
         <span className="flex items-center gap-1">
           <Droplets className="h-3 w-3 text-sky-500" />
-          Peak rain chance {peakRain.precipProb}% at {peakRain.label}
+          {data.nextRain
+            ? `Rain possible ${describeRainEta(data.nextRain, data.todayRain.currentlyRaining)} · ${
+                data.nextRain.precipProb
+              }%`
+            : 'No rain likely in the next 48 hours'}
         </span>
       </div>
 
@@ -197,7 +202,7 @@ export default function HourlyForecast() {
 
                 <span
                   className={`mt-1 flex items-center gap-0.5 text-[10px] font-semibold ${
-                    hour.precipProb >= 40
+                    hour.precipProb >= RAIN_THRESHOLD
                       ? 'text-sky-600 dark:text-sky-300'
                       : hour.precipProb > 0
                         ? 'text-sky-500/80'

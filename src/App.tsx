@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowUp, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { WeatherProvider, useWeatherContext } from './context/WeatherContext';
 import { useWeather } from './hooks/useWeather';
+import { WeatherData } from './types/weather';
 import ParallaxBackground from './components/ParallaxBackground';
 import Header from './components/Header';
 import Hero from './components/Hero';
@@ -33,7 +34,7 @@ function AppShell() {
       <ParallaxBackground condition={condition} isDay={isDay} theme={theme} />
       <ScrollProgress />
       <Header />
-      {data?.isSample && <SampleDataNotice />}
+      {data && data.dataSource !== 'live' && <DataSourceNotice data={data} />}
 
       <main className="relative">
         <Hero />
@@ -88,29 +89,44 @@ function AppShell() {
 }
 
 /**
- * The live API could not be reached, so every panel below is showing the offline
- * placeholder set. Say so plainly — identical numbers all week, flat charts and a
- * day icon after dark are otherwise baffling rather than obviously synthetic.
+ * The live API could not be reached. Say plainly which figures the page is
+ * actually showing — today's saved snapshot, or the offline placeholder set —
+ * rather than letting either masquerade as a live reading.
  */
-function SampleDataNotice() {
+function DataSourceNotice({ data }: { data: WeatherData }) {
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
+
+  const cached = data.dataSource === 'cache';
+  const tone = cached
+    ? 'border-sky-400/50 bg-sky-100/90 text-sky-900 dark:border-sky-400/30 dark:bg-sky-500/15 dark:text-sky-200'
+    : 'border-amber-400/50 bg-amber-100/90 text-amber-900 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200';
 
   return (
     <div className="fixed inset-x-0 top-20 z-40 px-3 sm:px-4">
       <div
         role="status"
-        className="mx-auto flex max-w-7xl items-center gap-2 rounded-2xl border border-amber-400/50 bg-amber-100/90 px-3.5 py-1.5 text-[11px] font-medium text-amber-900 shadow-glass backdrop-blur-xl dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-200"
+        className={`mx-auto flex max-w-7xl items-center gap-2 rounded-2xl border px-3.5 py-1.5 text-[11px] font-medium shadow-glass backdrop-blur-xl ${tone}`}
       >
         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
         <span className="flex-1">
-          <strong className="font-bold">Showing sample data.</strong> The live Open-Meteo feed is
-          unavailable right now, so these figures are generated placeholders — not real weather.
+          {cached ? (
+            <>
+              <strong className="font-bold">Showing today's saved weather.</strong> The live Open-Meteo
+              feed is unavailable, so {data.city} is built from the snapshot saved at{' '}
+              {data.savedAtLabel || 'earlier today'} local time. Retrying every 10 minutes.
+            </>
+          ) : (
+            <>
+              <strong className="font-bold">Showing sample data.</strong> The live Open-Meteo feed is
+              unavailable right now, so these figures are generated placeholders — not real weather.
+            </>
+          )}
         </span>
         <button
           type="button"
           onClick={() => setDismissed(true)}
-          aria-label="Dismiss sample data notice"
+          aria-label="Dismiss data source notice"
           className="shrink-0 rounded-lg p-1 transition-colors hover:bg-amber-500/20"
         >
           <X className="h-3.5 w-3.5" />

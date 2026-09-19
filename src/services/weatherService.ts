@@ -4,6 +4,8 @@ import {
   CitySummary,
   DayForecast,
   HourlyForecast,
+  RainEta,
+  RainOutlook,
   RainSlot,
   WeatherCondition,
   WeatherData,
@@ -16,6 +18,7 @@ import {
   computeDewPoint,
   computeHeatIndex,
   computeWindChill,
+  daysBetweenIso,
   formatClockFromIso,
   formatDuration,
   formatHourLabel,
@@ -25,11 +28,13 @@ import {
   getDominantPollutant,
   getMoonPhase,
   getWindDirectionText,
+  isRainHour,
   localClock,
   minutesFromIso,
   shortDateFromIso,
 } from '../utils/helpers';
 import { zoneOffsetMinutes } from '../utils/timezones';
+import { cityKey, dailyCache } from './weatherCache';
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const AIR_URL = 'https://air-quality-api.open-meteo.com/v1/air-quality';
@@ -38,6 +43,8 @@ const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
 const HOURLY_WINDOW = 48; // hours of hourly forecast exposed to the UI
 const BATCH_SIZE = 25; // coordinates per batched request
+/** Cities snapshotted to the daily file on the day's first load. */
+const DAILY_SEED_CITIES = 50;
 
 /* -------------------------------------------------------------------------- */
 /*  API response shapes                                                       */
@@ -81,6 +88,8 @@ interface OpenMeteoResponse {
     dew_point_2m: number[];
     uv_index: number[];
     surface_pressure: number[];
+    pressure_msl: number[];
+    cloud_cover: number[];
     is_day: number[];
   };
   daily: {
@@ -148,6 +157,10 @@ const HOURLY_FIELDS = [
   'dew_point_2m',
   'uv_index',
   'surface_pressure',
+  // Cloud cover and MSL pressure are not in the `current` block of a saved
+  // payload, so the hourly series carries them for the cached path.
+  'pressure_msl',
+  'cloud_cover',
   'is_day',
 ].join(',');
 
@@ -281,6 +294,8 @@ function iconEmoji(kind: WeatherIconKind): string {
 class WeatherService {
   private cache = new Map<string, CacheEntry>();
   private inflight = new Map<string, Promise<unknown>>();
+  /** The in-flight 50-city snapshot, so it runs once per day per page. */
+  private seeding: Promise<void> | null = null;
 
   /* ----------------------------- cache helpers ---------------------------- */
 
@@ -309,10 +324,10 @@ class WeatherService {
     return (await response.json()) as T;
   }
 
-  private buildForecastUrl(city: City, days = 7): string {
-    const params = new URLSearchParams({
-      latitude: city.lat.toString(),
-      longitude: city.lng.toString(),
+  private forecastParams(latitudes: string, longitudes: string, days: number): URLSearchParams {
+    return new URLSearchParams({
+      latitude: latitudes,
+      longitude: longitudes,
       current: CURRENT_FIELDS,
       hourly: HOURLY_FIELDS,
       daily: DAILY_FIELDS,
@@ -323,7 +338,166 @@ class WeatherService {
       past_days: '1',
       wind_speed_unit: 'kmh',
     });
-    return `${FORECAST_URL}?${params}`;
+  }
+
+  private buildForecastUrl(city: City, days = 7): string {
+    return `${FORECAST_URL}?${this.forecastParams(city.lat.toString(), city.lng.toString(), days)}`;
+  }
+
+  /** One request for up to 25 coordinates — the daily snapshot covers 50 in two. */
+  private buildBatchUrl(batch: City[], days = 7): string {
+    return `${FORECAST_URL}?${this.forecastParams(
+      batch.map((city) => city.lat).join(','),
+      batch.map((city) => city.lng).join(','),
+      days,
+    )}`;
+  }
+
+  /* ---------------------------- daily file cache --------------------------- */
+
+  /**
+   * Snapshots the whole bundled list to `data/weather-cache.json`, once, on the
+   * day's first load. Later loads only refresh the city being looked at (see
+   * `rememberCity`), so the day costs two requests for the fifty plus one per
+   * visit — and when the quota runs dry the cards rebuild from what was saved.
+   */
+  async seedDailyCache(list: City[], limit = DAILY_SEED_CITIES): Promise<void> {
+    if (this.seeding) return this.seeding;
+    const run = this.runDailySeed(list.slice(0, limit)).finally(() => {
+      this.seeding = null;
+    });
+    this.seeding = run;
+    return run;
+  }
+
+  private async runDailySeed(targets: City[]): Promise<void> {
+    try {
+      // A new day starts by throwing the old document away — the file holds one
+      // day only — then filling today's, so a load on a new day clears yesterday
+      // even if the API answers nothing.
+      const doc = await dailyCache.startToday();
+      await dailyCache.flush();
+      const missing = targets.filter((city) => !doc.cities[cityKey(city)]);
+      if (missing.length === 0) return;
+      const saved = await this.fetchPayloads(missing);
+      if (saved.length === 0) return;
+      await dailyCache.mutate((next) => {
+        saved.forEach(({ city, payload }) => {
+          next.cities[cityKey(city)] = {
+            city,
+            payload,
+            fetchedAt: Date.now(),
+            fetchedAtLabel: localClock(payload.utc_offset_seconds ?? 0).time,
+          };
+        });
+        next.seededAt = Date.now();
+      });
+      // The seed is the record the whole day depends on — land it immediately
+      // rather than waiting for the burst of per-city updates to settle.
+      await dailyCache.flush();
+    } catch (error) {
+      console.error('Daily weather snapshot failed:', error);
+    }
+  }
+
+  /** Full hourly + daily payloads, batched 25 coordinates per request. */
+  private async fetchPayloads(list: City[]): Promise<Array<{ city: City; payload: OpenMeteoResponse }>> {
+    const saved: Array<{ city: City; payload: OpenMeteoResponse }> = [];
+    await Promise.all(
+      chunk(list, BATCH_SIZE).map(async (batch) => {
+        try {
+          const payload = await this.fetchJson<OpenMeteoResponse[] | OpenMeteoResponse>(
+            this.buildBatchUrl(batch),
+          );
+          const rows = Array.isArray(payload) ? payload : [payload];
+          rows.forEach((row, index) => {
+            const city = batch[index];
+            if (city && row?.current) saved.push({ city, payload: row });
+          });
+        } catch (error) {
+          console.error('Daily weather snapshot batch failed:', error);
+        }
+      }),
+    );
+    return saved;
+  }
+
+  /** Keeps today's saved copy of one city current — the per-load refresh. */
+  private rememberCity(city: City, payload: OpenMeteoResponse): void {
+    void dailyCache
+      .mutate((doc) => {
+        doc.cities[cityKey(city)] = {
+          city,
+          payload,
+          fetchedAt: Date.now(),
+          fetchedAtLabel: localClock(payload.utc_offset_seconds ?? 0).time,
+        };
+      })
+      .catch(() => {
+        /* the snapshot is a convenience, never a reason to fail a request */
+      });
+  }
+
+  private rememberAirQuality(city: City, reading: AirQualityData): void {
+    void dailyCache
+      .mutate((doc) => {
+        doc.aqi[cityKey(city)] = {
+          at: Date.now(),
+          label: localClock(offsetSecondsForZone(city.timezone)).time,
+          reading,
+        };
+      })
+      .catch(() => {
+        /* ignore */
+      });
+  }
+
+  /** Today's saved snapshot for a city, re-anchored to the current hour. */
+  private async savedWeather(city: City): Promise<WeatherData | null> {
+    const doc = await dailyCache.get();
+    const entry = doc?.cities[cityKey(city)];
+    if (!entry) return null;
+    try {
+      return this.parseWeatherData(city, entry.payload as OpenMeteoResponse, {
+        fromCache: true,
+        savedAtLabel: entry.fetchedAtLabel,
+      });
+    } catch (error) {
+      console.error(`Saved weather for ${city.name} is unusable:`, error);
+      return null;
+    }
+  }
+
+  /** The observation for "now", taken from the hourly row when `current` is stale. */
+  private observationAt(data: OpenMeteoResponse, index: number): OpenMeteoResponse['current'] {
+    const { current, hourly } = data;
+    const at = (values: number[] | undefined, fallback: number) => values?.[index] ?? fallback;
+    return {
+      time: hourly?.time?.[index] ?? current.time,
+      temperature_2m: at(hourly?.temperature_2m, current.temperature_2m),
+      relative_humidity_2m: at(hourly?.relative_humidity_2m, current.relative_humidity_2m),
+      apparent_temperature: at(hourly?.apparent_temperature, current.apparent_temperature),
+      precipitation: at(hourly?.precipitation, current.precipitation),
+      weather_code: at(hourly?.weather_code, current.weather_code),
+      wind_speed_10m: at(hourly?.wind_speed_10m, current.wind_speed_10m),
+      wind_direction_10m: at(hourly?.wind_direction_10m, current.wind_direction_10m),
+      wind_gusts_10m: at(hourly?.wind_gusts_10m, current.wind_gusts_10m),
+      surface_pressure: at(hourly?.surface_pressure, current.surface_pressure),
+      pressure_msl: at(hourly?.pressure_msl, current.pressure_msl ?? current.surface_pressure),
+      cloud_cover: at(hourly?.cloud_cover, current.cloud_cover ?? 0),
+      is_day: hourly?.is_day?.[index] ?? current.is_day,
+      precipitation_probability: at(
+        hourly?.precipitation_probability,
+        current.precipitation_probability ?? 0,
+      ),
+    };
+  }
+
+  /** Index of the hour a wall clock falls in, or -1 when the series stops short. */
+  private hourIndexAt(data: OpenMeteoResponse, clock: { iso: string; time24: string }): number {
+    const anchor = `${clock.iso}T${clock.time24.slice(0, 2)}`;
+    const index = data.hourly?.time?.findIndex((time) => time.slice(0, 13) >= anchor) ?? -1;
+    return index;
   }
 
   /* ------------------------------ full detail ----------------------------- */
@@ -338,16 +512,24 @@ class WeatherService {
         const data = await this.fetchJson<OpenMeteoResponse>(this.buildForecastUrl(city, 7));
         const parsed = this.parseWeatherData(city, data);
         this.setCache(cacheKey, parsed);
+        // Keep the day's file current for whichever city is on screen.
+        this.rememberCity(city, data);
         return parsed;
       } catch (error) {
-        console.error(`Failed to fetch weather for ${city.name}:`, error);
+        console.warn(`Live weather for ${city.name} unavailable — reading today's snapshot:`, error);
+        const saved = await this.savedWeather(city);
+        if (saved) return saved;
         return this.getFallbackWeather(city);
       }
     });
   }
 
-  private parseWeatherData(city: City, data: OpenMeteoResponse): WeatherData {
-    const { current, hourly, daily } = data;
+  private parseWeatherData(
+    city: City,
+    data: OpenMeteoResponse,
+    opts: { fromCache?: boolean; savedAtLabel?: string } = {},
+  ): WeatherData {
+    const { hourly, daily } = data;
     const offset = data.utc_offset_seconds ?? 0;
     const clock = localClock(offset);
 
@@ -357,9 +539,18 @@ class WeatherService {
     const todayIndex = Math.max(0, daily.time.indexOf(todayIso));
 
     /* ---- locate "now" inside the hourly series using the city's own clock -- */
-    const currentIso = current.time.slice(0, 13); // 2026-09-17T13
-    let startIndex = hourly.time.findIndex((t) => t.slice(0, 13) >= currentIso);
+    // A saved payload's `current.time` is frozen at capture time, so the cached
+    // path anchors on the city's wall clock instead — reading the file at 6 PM
+    // then describes 6 PM, not the hour the file was written.
+    const anchor = opts.fromCache
+      ? `${todayIso}T${clock.time24.slice(0, 2)}`
+      : data.current.time.slice(0, 13); // 2026-09-17T13
+    let startIndex = hourly.time.findIndex((t) => t.slice(0, 13) >= anchor);
     if (startIndex < 0) startIndex = 0;
+
+    /* A saved `current` block is hours old; take the observation from the hourly
+       row we just anchored on so every panel reads the same moment. */
+    const current = opts.fromCache ? this.observationAt(data, startIndex) : data.current;
 
     /* ---- sunrise / sunset lookup per calendar day ------------------------- */
     const sunByDate = new Map<string, { rise: number; set: number; riseIso: string; setIso: string }>();
@@ -433,6 +624,9 @@ class WeatherService {
     });
     const todayRain = buildRainOutlook(rainSlots);
 
+    /* ---- when rain is next possible (one answer for every card) ----------- */
+    const nextRain = this.nextRainFrom(hourlyForecast, todayIso);
+
     /* ---- daily ------------------------------------------------------------ */
     // Any past day at the head of the series is dropped, and the week starts today.
     const forecast: DayForecast[] = daily.time
@@ -455,8 +649,14 @@ class WeatherService {
           condition,
           icon: iconEmoji(kind),
           iconKind: kind,
-          rainProb: Math.round(daily.precipitation_probability_max?.[index] ?? 0),
-          rainfall: Math.round((daily.precipitation_sum?.[index] ?? 0) * 10) / 10,
+          // Today's row reports the same peak and total the rain timeline does.
+          // Open-Meteo's own daily maximum is a separate aggregate and reads as a
+          // contradiction next to the hourly timeline, so the hourly figures win.
+          rainProb: date === todayIso ? todayRain.peakProb : Math.round(daily.precipitation_probability_max?.[index] ?? 0),
+          rainfall:
+            date === todayIso
+              ? todayRain.totalRainfall
+              : Math.round((daily.precipitation_sum?.[index] ?? 0) * 10) / 10,
           windSpeed: Math.round(daily.wind_speed_10m_max?.[index] ?? 0),
           windGust: Math.round(daily.wind_gusts_10m_max?.[index] ?? 0),
           humidity: Math.round(current.relative_humidity_2m),
@@ -551,8 +751,10 @@ class WeatherService {
       rainProbability: nowHour?.precipProb ?? 0,
       rainfall: Math.round((current.precipitation ?? 0) * 10) / 10,
 
-      isSample: false,
+      dataSource: opts.fromCache ? 'cache' : 'live',
+      savedAtLabel: opts.savedAtLabel,
       todayRain,
+      nextRain,
       hourly: hourlyForecast,
       forecast,
       alerts: [],
@@ -565,6 +767,28 @@ class WeatherService {
     return weatherData;
   }
 
+  /**
+   * The first hour from now where rain is possible, preferring nothing at all
+   * over a guess: the hourly list starts at the current hour, so index 0 is
+   * "this hour", and the day hint is resolved against the city's own date.
+   */
+  private nextRainFrom(hours: HourlyForecast[], todayIso: string): RainEta | null {
+    for (let index = 0; index < hours.length; index++) {
+      const hour = hours[index];
+      if (!isRainHour(hour)) continue;
+      const offset = daysBetweenIso(todayIso, hour.time.slice(0, 10));
+      return {
+        time: hour.time,
+        label: hour.label,
+        dayHint: offset <= 0 ? '' : offset === 1 ? 'tomorrow' : hour.dayLabel,
+        precipProb: hour.precipProb,
+        rainfall: hour.rainfall,
+        hoursAway: index,
+      };
+    }
+    return null;
+  }
+
   /* --------------------------- batch summaries ---------------------------- */
 
   /**
@@ -572,13 +796,18 @@ class WeatherService {
    * keeps the 50-city grid and the global map from hammering the API.
    */
   async getCitySummaries(list: City[], force = false): Promise<Map<string, CitySummary>> {
-    const result = new Map<string, CitySummary>();
     const cacheKey = `summaries::${list.map((c) => `${c.lat.toFixed(2)},${c.lng.toFixed(2)}`).join('|')}`;
     if (!force) {
       const cached = this.getCache<Map<string, CitySummary>>(cacheKey);
       if (cached) return cached;
     }
+    // Two panels can mount in the same tick (and StrictMode mounts twice), so
+    // collapse them: the batch must not be paid for twice.
+    return this.dedupe(cacheKey, () => this.fetchCitySummaries(list, cacheKey));
+  }
 
+  private async fetchCitySummaries(list: City[], cacheKey: string): Promise<Map<string, CitySummary>> {
+    const result = new Map<string, CitySummary>();
     const batches = chunk(list, BATCH_SIZE);
     await Promise.all(
       batches.map(async (batch) => {
@@ -587,6 +816,9 @@ class WeatherService {
           longitude: batch.map((c) => c.lng).join(','),
           current: 'temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,is_day,precipitation_probability',
           daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code',
+          // The hourly chance is what the detail card charts, so the grid quotes
+          // the same metric instead of Open-Meteo's separate daily aggregate.
+          hourly: 'precipitation_probability',
           timezone: 'auto',
           forecast_days: '1',
           wind_speed_unit: 'kmh',
@@ -600,35 +832,25 @@ class WeatherService {
 
           rows.forEach((row, index) => {
             const city = batch[index];
-            if (!city || !row?.current) return;
-            const isDay = row.current.is_day === 1;
-            const condition = wmoToCondition(row.current.weather_code, isDay);
-            const kind = iconKindFor(condition, isDay);
-            const clock = localClock(row.utc_offset_seconds ?? 0);
-            const aqi = this.getCache<number>(`aqi-value::${city.lat.toFixed(3)},${city.lng.toFixed(3)}`) ?? null;
-
-            result.set(city.name, {
-              city,
-              temperature: Math.round(row.current.temperature_2m),
-              feelsLike: Math.round(row.current.apparent_temperature ?? row.current.temperature_2m),
-              condition,
-              icon: iconEmoji(kind),
-              iconKind: kind,
-              isDay,
-              tempMax: Math.round(row.daily?.temperature_2m_max?.[0] ?? row.current.temperature_2m),
-              tempMin: Math.round(row.daily?.temperature_2m_min?.[0] ?? row.current.temperature_2m),
-              humidity: Math.round(row.current.relative_humidity_2m),
-              windSpeed: Math.round(row.current.wind_speed_10m),
-              rainProbability: Math.round(
-                row.daily?.precipitation_probability_max?.[0] ?? row.current.precipitation_probability ?? 0,
-              ),
-              aqi,
-              aqiCategory: aqi !== null ? getAQICategory(aqi) : null,
-              localTime: clock.time,
-            });
+            if (!city) return;
+            const summary = this.summaryFor(city, row, 'live');
+            if (summary) result.set(city.name, summary);
           });
         } catch (error) {
           console.error('Batch weather fetch failed:', error);
+          // Fall back to the day's snapshot before giving up on this batch.
+          const doc = await dailyCache.get();
+          batch.forEach((city) => {
+            const entry = doc?.cities[cityKey(city)];
+            if (!entry) return;
+            const summary = this.summaryFor(
+              city,
+              entry.payload as OpenMeteoResponse,
+              'cache',
+              doc?.aqi[cityKey(city)]?.reading ?? null,
+            );
+            if (summary) result.set(city.name, summary);
+          });
         }
       }),
     );
@@ -649,7 +871,7 @@ class WeatherService {
         tempMin: fallback.tempMin,
         humidity: fallback.humidity,
         windSpeed: fallback.windSpeed,
-        rainProbability: fallback.rainProbability,
+        rainProbability: fallback.todayRain.peakProb,
         aqi: null,
         aqiCategory: null,
         localTime: fallback.localTime,
@@ -660,6 +882,60 @@ class WeatherService {
     return result;
   }
 
+  /**
+   * One city's grid card, from either a live row or today's saved payload. A
+   * saved payload's `current` block is hours old, so on that path the reading
+   * comes from the hourly row for *now* — the grid should show the afternoon's
+   * weather, not whatever the morning snapshot happened to catch.
+   */
+  private summaryFor(
+    city: City,
+    row: OpenMeteoResponse,
+    source: 'live' | 'cache',
+    savedAqi: AirQualityData | null = null,
+  ): CitySummary | null {
+    if (!row?.current) return null;
+    const clock = localClock(row.utc_offset_seconds ?? 0);
+    const index = this.hourIndexAt(row, clock);
+    const observation = source === 'cache' && index >= 0 ? this.observationAt(row, index) : row.current;
+    const todayIndex = Math.max(0, row.daily?.time?.indexOf(clock.iso) ?? 0);
+
+    const isDay = observation.is_day === 1;
+    const condition = wmoToCondition(observation.weather_code, isDay);
+    const kind = iconKindFor(condition, isDay);
+    const aqi =
+      savedAqi?.aqi ?? this.getCache<number>(`aqi-value::${city.lat.toFixed(3)},${city.lng.toFixed(3)}`) ?? null;
+
+    /* Today's hourly peak — the figure the timeline and the hourly strip report.
+       The API's daily maximum is a separate aggregate and reads as a
+       contradiction when the two sit on the same page. */
+    const hourlyProbabilities = (row.hourly?.precipitation_probability ?? []) as number[];
+    const todayProbabilities = hourlyProbabilities.filter((_, index) =>
+      (row.hourly?.time?.[index] ?? '').startsWith(clock.iso),
+    );
+    const rainProbability = todayProbabilities.length
+      ? Math.max(...todayProbabilities)
+      : Math.round(row.daily?.precipitation_probability_max?.[todayIndex] ?? 0);
+
+    return {
+      city,
+      temperature: Math.round(observation.temperature_2m),
+      feelsLike: Math.round(observation.apparent_temperature ?? observation.temperature_2m),
+      condition,
+      icon: iconEmoji(kind),
+      iconKind: kind,
+      isDay,
+      tempMax: Math.round(row.daily?.temperature_2m_max?.[todayIndex] ?? observation.temperature_2m),
+      tempMin: Math.round(row.daily?.temperature_2m_min?.[todayIndex] ?? observation.temperature_2m),
+      humidity: Math.round(observation.relative_humidity_2m),
+      windSpeed: Math.round(observation.wind_speed_10m),
+      rainProbability,
+      aqi,
+      aqiCategory: aqi !== null ? getAQICategory(aqi) : null,
+      localTime: clock.time,
+    };
+  }
+
   /* ------------------------------ air quality ----------------------------- */
 
   async getAirQuality(city: City): Promise<AirQualityData | null> {
@@ -667,25 +943,35 @@ class WeatherService {
     const cached = this.getCache<AirQualityData>(cacheKey);
     if (cached) return cached;
 
-    try {
-      const params = new URLSearchParams({
-        latitude: city.lat.toString(),
-        longitude: city.lng.toString(),
-        current: 'us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide',
-      });
-      const data = await this.fetchJson<OpenMeteoAQIResponse>(`${AIR_URL}?${params}`);
-      const parsed = this.parseAirQuality(data);
-      this.setCache(cacheKey, parsed);
-      this.setCache(`aqi-value::${city.lat.toFixed(3)},${city.lng.toFixed(3)}`, parsed.aqi);
-      return parsed;
-    } catch (error) {
-      console.error(`Failed to fetch AQI for ${city.name}:`, error);
-      return null;
-    }
+    // Several panels ask for the same city's air quality; one request serves them
+    // all (and one saved copy, rather than one per panel).
+    return this.dedupe(cacheKey, async () => {
+      try {
+        const params = new URLSearchParams({
+          latitude: city.lat.toString(),
+          longitude: city.lng.toString(),
+          current: 'us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide',
+        });
+        const data = await this.fetchJson<OpenMeteoAQIResponse>(`${AIR_URL}?${params}`);
+        const parsed = this.parseAirQuality(data);
+        this.setCache(cacheKey, parsed);
+        this.setCache(`aqi-value::${city.lat.toFixed(3)},${city.lng.toFixed(3)}`, parsed.aqi);
+        this.rememberAirQuality(city, parsed);
+        return parsed;
+      } catch (error) {
+        console.error(`Failed to fetch AQI for ${city.name}:`, error);
+        return (await dailyCache.get())?.aqi[cityKey(city)]?.reading ?? null;
+      }
+    });
   }
 
   /** Batch AQI so the grid can show a real reading instead of a placeholder. */
   async getAirQualityBatch(list: City[]): Promise<void> {
+    const key = `aqi-batch::${list.map((city) => `${city.lat.toFixed(2)},${city.lng.toFixed(2)}`).join('|')}`;
+    return this.dedupe(key, () => this.fetchAirQualityBatch(list));
+  }
+
+  private async fetchAirQualityBatch(list: City[]): Promise<void> {
     const batches = chunk(list, BATCH_SIZE);
     await Promise.all(
       batches.map(async (batch) => {
@@ -708,6 +994,14 @@ class WeatherService {
           });
         } catch (error) {
           console.error('Batch AQI fetch failed:', error);
+          // Read the day's saved readings into the cache instead of leaving gaps.
+          const doc = await dailyCache.get();
+          batch.forEach((city) => {
+            const saved = doc?.aqi[cityKey(city)];
+            if (!saved) return;
+            this.setCache(`aqi::${city.lat.toFixed(3)},${city.lng.toFixed(3)}`, saved.reading);
+            this.setCache(`aqi-value::${city.lat.toFixed(3)},${city.lng.toFixed(3)}`, saved.reading.aqi);
+          });
         }
       }),
     );
@@ -860,11 +1154,13 @@ class WeatherService {
       const kind = iconKindFor(condition, isDay);
       const temp = tempAtHour(hour);
       const humidity = humidityAtHour(hour);
-      const iso = `2000-01-01T${hour.toString().padStart(2, '0')}:00`;
+      // Real dates, not placeholders: the shared "when does it next rain" logic
+      // reads the calendar day off this string, exactly as it does for live data.
+      const iso = `${localDateAt(Math.floor((nowHour + index) / 24))}T${hour.toString().padStart(2, '0')}:00`;
       return {
         time: iso,
         label: formatHourLabel(iso),
-        dayLabel: index === 0 || hour > nowHour ? 'Today' : 'Tomorrow',
+        dayLabel: dayLabelFromIso(iso),
         isNow: index === 0,
         isDay,
         temp,
@@ -899,6 +1195,7 @@ class WeatherService {
       };
     });
     const todayRain = buildRainOutlook(rainSlots);
+    const nextRain = this.nextRainFrom(hourly, clock.iso);
 
     const forecast: DayForecast[] = Array.from({ length: 7 }, (_, index) => {
       const date = localDateAt(index);
@@ -989,8 +1286,9 @@ class WeatherService {
       moonIllumination: moon.illumination,
       rainProbability: now.precipProb,
       rainfall: now.rainfall,
-      isSample: true,
+      dataSource: 'sample',
       todayRain,
+      nextRain,
       hourly,
       forecast,
       alerts: [],

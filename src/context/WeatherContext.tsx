@@ -10,6 +10,7 @@ import {
 import { City, CitySummary, TemperatureUnit } from '../types/weather';
 import { cities, defaultCity, findBundledCity } from '../data/cities';
 import { useCitySummaries } from '../hooks/useWeather';
+import { weatherService } from '../services/weatherService';
 
 interface WeatherContextType {
   selectedCity: City;
@@ -126,6 +127,16 @@ export function WeatherProvider({ children }: { children: ReactNode }) {
   const [selectedContinent, setSelectedContinent] = useState('All Cities');
   const [favorites, setFavorites] = useState<string[]>(() => readStoredList(STORAGE.favorites));
   const [recentlyViewed, setRecentlyViewed] = useState<string[]>(() => readStoredList(STORAGE.recent));
+
+  /*
+   * On the day's first load, snapshot every bundled city to disk. Open-Meteo's
+   * free quota routinely runs out part-way through the day; from then on the
+   * cards can be rebuilt from the file instead of from invented numbers. Later
+   * loads only refresh the city being viewed (see `weatherService.getWeather`).
+   */
+  useEffect(() => {
+    void weatherService.seedDailyCache(cities);
+  }, []);
 
   /* ------------------------------- theme -------------------------------- */
   useEffect(() => {

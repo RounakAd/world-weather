@@ -15,8 +15,15 @@ import {
 } from 'lucide-react';
 import { useWeatherContext } from '../context/WeatherContext';
 import { useLocalClock, useWeather } from '../hooks/useWeather';
-import { formatTemp, formatTempBare, generateWeatherAlerts, getUVCategory, RAIN_THRESHOLD } from '../utils/helpers';
-import { RainOutlook } from '../types/weather';
+import {
+  describeRainEta,
+  formatTemp,
+  formatTempBare,
+  generateWeatherAlerts,
+  getUVCategory,
+  RAIN_THRESHOLD,
+} from '../utils/helpers';
+import { RainEta, RainOutlook } from '../types/weather';
 import WeatherMetrics from './WeatherMetrics';
 import WeatherIcon from './WeatherIcon';
 import GlassCard from './GlassCard';
@@ -352,13 +359,15 @@ export default function FeaturedWeather() {
               </div>
 
               {/* ---------------------------- rain today ------------------------ */}
-              <RainTodaySection outlook={data.todayRain} />
+              <RainTodaySection outlook={data.todayRain} nextRain={data.nextRain} />
 
               <div className="mt-4 flex items-center gap-1.5 text-[11px] text-faint">
                 <Info className="h-3 w-3" />
-                {data.isSample
+                {data.dataSource === 'sample'
                   ? `Sample data for ${data.lastUpdated} local time — the live feed is unreachable, so these figures are placeholders. Retrying every 10 minutes.`
-                  : `Updated ${data.lastUpdated} local time · auto-refreshes every 10 minutes`}
+                  : data.dataSource === 'cache'
+                    ? `Saved reading from ${data.savedAtLabel || 'earlier today'} local time — the live feed is unreachable, so this card is built from today's saved snapshot. Retrying every 10 minutes.`
+                    : `Updated ${data.lastUpdated} local time · auto-refreshes every 10 minutes`}
               </div>
             </div>
           </GlassCard>
@@ -407,19 +416,26 @@ const RAIN_STATUS = {
  * the calendar day (00:00 → 23:00, past hours dimmed) plus the wet spells spelled
  * out as start → end timings.
  */
-function RainTodaySection({ outlook }: { outlook: RainOutlook }) {
+function RainTodaySection({ outlook, nextRain }: { outlook: RainOutlook; nextRain: RainEta | null }) {
   const { slots, windows, peakProb, totalRainfall, currentlyRaining, nextWindow } = outlook;
   const nowHour = slots.find((slot) => slot.isNow)?.hour ?? -1;
   const maxProb = Math.max(RAIN_THRESHOLD + 10, ...slots.map((slot) => slot.precipProb));
   const barHeight = (prob: number) => Math.max(3, Math.round((prob / maxProb) * 46));
 
+  /* The headline, the hourly strip and the precipitation chart all quote this
+     one answer, so the page cannot say "7 PM" in one card and "tomorrow" in
+     the next. */
   const headline = currentlyRaining
     ? 'Raining right now'
-    : nextWindow
-      ? `Next wet spell around ${nextWindow.startLabel}`
+    : nextRain
+      ? nextRain.hoursAway === 0
+        ? `Rain possible this hour (${nextRain.precipProb}%)`
+        : nextRain.dayHint
+          ? `No more rain today — next chance ${describeRainEta(nextRain)}`
+          : `Next wet spell around ${nextRain.label} (${nextRain.precipProb}%)`
       : windows.length
         ? "All of today's rain has already passed"
-        : 'No rain expected at any point today';
+        : 'No rain expected today or tomorrow';
 
   return (
     <div className="glass-inset mt-6 p-4">

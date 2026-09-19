@@ -1,5 +1,7 @@
-import { Coffee, Github, Globe, Instagram, Smartphone } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Check, CloudUpload, Coffee, Github, Globe, Instagram, Smartphone } from 'lucide-react';
 import GlassCard from './GlassCard';
+import { githubSync, type SyncStatus } from '../services/githubSync';
 
 const SECTIONS = [
   { id: 'current-weather', label: 'Current weather' },
@@ -8,6 +10,39 @@ const SECTIONS = [
   { id: 'insights', label: 'Trends & air' },
   { id: 'city-grid', label: 'All cities' },
 ];
+
+/**
+ * A single quiet line about the repository snapshot.
+ *
+ * The sync has no controls on purpose — the token comes from the build — but a
+ * silent background feature is impossible to trust, so its outcome is visible.
+ * Nothing renders on a build without a token.
+ */
+function SnapshotStatus() {
+  const [status, setStatus] = useState<SyncStatus>(() => githubSync.getStatus());
+  const [enabled] = useState(() => githubSync.hasToken());
+
+  useEffect(() => githubSync.subscribe(setStatus), []);
+
+  if (!enabled || status.state === 'off') return null;
+
+  const failed = status.state === 'error';
+  const done = status.state === 'synced';
+  const label = failed
+    ? 'Snapshot not committed'
+    : done
+      ? `Snapshot committed${status.sha ? ` · ${status.sha}` : ''}`
+      : status.state === 'unchanged'
+        ? 'Snapshot already current'
+        : 'Committing snapshot…';
+
+  return (
+    <span className={`flex items-center gap-1.5 ${failed ? 'text-rose-500' : 'text-faint'}`} title={status.message}>
+      {done ? <Check className="h-3 w-3" /> : <CloudUpload className="h-3 w-3" />}
+      {label}
+    </span>
+  );
+}
 
 export default function Footer() {
   return (
@@ -139,9 +174,12 @@ export default function Footer() {
               Powered by <strong className="font-semibold text-slate-700 dark:text-slate-200">Soumili Das</strong>
             </span>
           </div>
-          <span className="text-faint">
-            © {new Date().getFullYear()} World Weather Info. All rights reserved.
-          </span>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <SnapshotStatus />
+            <span className="text-faint">
+              © {new Date().getFullYear()} World Weather Info. All rights reserved.
+            </span>
+          </div>
         </div>
       </div>
     </footer>

@@ -1,5 +1,6 @@
 import {
   AirQualityData,
+  RainEta,
   RainOutlook,
   RainSlot,
   RainWindow,
@@ -586,8 +587,36 @@ export function generateWeatherAlerts(data: WeatherData): WeatherAlert[] {
 /** Probability at or above which an hour counts as "might rain". */
 export const RAIN_THRESHOLD = 30;
 
+/**
+ * The single rule for "this hour might rain". Every rain surface — the timeline,
+ * the hourly strip's colouring, the precipitation chart — reads it, so a 30% hour
+ * cannot be highlighted in one card and ignored in the next.
+ */
+export function isRainHour(hour: { precipProb: number; rainfall: number }): boolean {
+  return hour.precipProb >= RAIN_THRESHOLD || hour.rainfall > 0.1;
+}
+
 function isRainyHour(slot: RainSlot): boolean {
-  return slot.precipProb >= RAIN_THRESHOLD || slot.rainfall > 0.1;
+  return isRainHour(slot);
+}
+
+/**
+ * "2 PM" / "tomorrow 2 PM" / "Sat 2 PM" — the exact same phrase in every card,
+ * so no two panels disagree about when it is going to rain.
+ */
+export function describeRainEta(eta: RainEta | null | undefined, currentlyRaining = false): string {
+  if (currentlyRaining) return 'right now';
+  if (!eta) return '';
+  if (eta.hoursAway === 0) return 'this hour';
+  return eta.dayHint ? `${eta.dayHint} ${eta.label}` : eta.label;
+}
+
+/** Whole days from `fromIso` to `toIso` (both YYYY-MM-DD). */
+export function daysBetweenIso(fromIso: string, toIso: string): number {
+  const from = Date.parse(`${fromIso}T00:00:00Z`);
+  const to = Date.parse(`${toIso}T00:00:00Z`);
+  if (Number.isNaN(from) || Number.isNaN(to)) return 0;
+  return Math.round((to - from) / 86400000);
 }
 
 /**

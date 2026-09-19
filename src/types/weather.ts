@@ -145,6 +145,27 @@ export interface RainOutlook {
   currentlyRaining: boolean;
 }
 
+/**
+ * When rain is next possible, counting from right now. One shared answer so the
+ * rain timeline, the hourly strip and the precipitation chart can never quote
+ * different times or percentages at each other.
+ */
+export interface RainEta {
+  /** Local ISO time of the first hour that might rain. */
+  time: string;
+  /** Formatted in the city's own timezone, e.g. "2 PM". */
+  label: string;
+  /** "tomorrow" / "Sat" when it is not today; empty on the city's current day. */
+  dayHint: string;
+  precipProb: number;
+  rainfall: number;
+  /** Whole hours between now and that hour (0 = the hour we are in). */
+  hoursAway: number;
+}
+
+/** Where a set of figures came from. */
+export type WeatherSource = 'live' | 'cache' | 'sample';
+
 export interface WeatherData {
   city: string;
   country: string;
@@ -200,12 +221,19 @@ export interface WeatherData {
   /** Full picture of today's rain, including hours that have already passed. */
   todayRain: RainOutlook;
 
+  /** The next hour that might rain, from now — null when the next 48 h stay dry. */
+  nextRain: RainEta | null;
+
   /**
-   * true when the live API could not be reached and these figures are the
-   * offline placeholder set — the UI says so rather than passing them off as
-   * real weather.
+   * Where these figures came from: the live API, today's saved snapshot in
+   * `data/weather-cache.json`, or the offline placeholder set. Only 'live' is
+   * real-time weather; the UI says so for the other two rather than passing
+   * them off as a live reading.
    */
-  isSample: boolean;
+  dataSource: WeatherSource;
+
+  /** City-local clock label of the saved snapshot ('cache' only), e.g. "1:20 PM". */
+  savedAtLabel?: string;
 
   hourly: HourlyForecast[];
   forecast: DayForecast[];

@@ -17,6 +17,7 @@ import { useWeatherContext } from '../context/WeatherContext';
 import { useWeather } from '../hooks/useWeather';
 import GlassCard from './GlassCard';
 import { GlassTooltip } from './WeatherTrends';
+import { describeRainEta } from '../utils/helpers';
 
 export default function PrecipitationChart() {
   const { selectedCity } = useWeatherContext();
@@ -39,9 +40,8 @@ export default function PrecipitationChart() {
       probability: hour.precipProb,
       rainfall: hour.rainfall,
     }));
-    const nextRain = hourly.find((hour) => hour.probability >= 40);
 
-    return { weekly, total, wettest, highestProb, rainyDays, hourly, nextRain };
+    return { weekly, total, wettest, highestProb, rainyDays, hourly };
   }, [data]);
 
   if (loading || !data || !stats) {
@@ -71,9 +71,11 @@ export default function PrecipitationChart() {
             Rain &amp; precipitation
           </h3>
           <p className="mt-0.5 text-[11px] text-faint">
-            {stats.nextRain
-              ? `Next notable rain chance at ${stats.nextRain.label} (${stats.nextRain.probability}%)`
-              : 'No significant rain expected in the next 24 hours'}
+            {data.nextRain
+              ? `Next rain chance ${describeRainEta(data.nextRain, data.todayRain.currentlyRaining)} (${
+                  data.nextRain.precipProb
+                }%)`
+              : 'No rain expected in the next 48 hours'}
           </p>
         </div>
         <span className="rounded-full bg-indigo-500/15 px-3 py-1 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
