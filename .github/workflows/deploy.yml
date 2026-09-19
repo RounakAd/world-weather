@@ -33,18 +33,8 @@ jobs:
       # `vite.config.ts` derives the base path from GITHUB_REPOSITORY, which
       # Actions sets automatically: project sites are served from /<repo>/ and
       # <owner>.github.io sites from the root. Nothing to configure here.
-      #
-      # WEATHER_SYNC_TOKEN is compiled into the bundle so the deployed site can
-      # commit the day's weather snapshot to the repository (see
-      # src/services/githubSync.ts). It is a repository secret precisely because
-      # the value ends up in public JavaScript: scope it to this repository with
-      # Contents read & write and nothing else. Without it the site still works —
-      # it simply reads whoever else's snapshot instead of writing its own.
       - name: Build
         run: npm run build
-        env:
-          VITE_GITHUB_TOKEN: ${{ secrets.WEATHER_SYNC_TOKEN }}
-          VITE_GITHUB_BRANCH: master
 
       # A wrong base path is the classic Pages failure: index.html loads, every
       # /assets/* request 404s, and the page renders blank with no visible error.

@@ -3,23 +3,24 @@
  *
  * Open-Meteo's free tier runs out of requests part-way through the day, and when
  * it does every panel silently degrades to invented placeholder numbers. Instead
- * we keep the real thing: on the day's *first* load the 50 bundled cities are
- * fetched and written to `data/weather-cache.json` by the dev server, later loads
- * refresh just the city being looked at, and when a request fails the card is
- * rebuilt from today's saved payload rather than from placeholders.
+ * we keep the real thing somewhere durable and read it back:
+ *
+ *   - A scheduled GitHub Action (`.github/workflows/weather-snapshot.yml`) fetches
+ *     all bundled cities a few times a day and commits the document to
+ *     `data/weather-cache.json` on `master` — using GitHub's own token, so no
+ *     secret ever ships in the public bundle.
+ *   - In development the Vite dev server also writes the file locally (the
+ *     `weather-daily-cache` plugin in `vite.config.ts`), so a dev session records
+ *     the cities it actually viewed.
+ *   - The browser never writes to GitHub. It reads today's document from the dev
+ *     server, from localStorage, or straight from the repository via the public
+ *     raw URL — whichever answers first with today's date.
  *
  * Only one day is ever stored — a document whose date is not today's is treated
- * as absent, and the first write of a new day replaces the file wholesale.
- *
- * Two homes, three backends: the dev server writes the file in the repo, static
- * hosting such as GitHub Pages mirrors the same JSON document into localStorage,
- * and any build that holds a GitHub token also commits the file to the repository
- * (see `githubSync`). Reads fall back across all three, so a deployed site with an
- * empty browser cache can still start the day from the committed snapshot.
+ * as absent.
  */
 
 import { AirQualityData, City } from '../types/weather';
-import { githubSync } from './githubSync';
 
 /** One city's snapshot: the raw Open-Meteo payload, untouched. */
 export interface CachedCityEntry {
@@ -51,6 +52,12 @@ export interface DailyCacheDoc {
 
 const ENDPOINT = '/api/weather-cache';
 const LOCAL_KEY = 'weather-daily-cache-v1';
+
+/** The committed copy lives at this path on the default branch. */
+export const SNAPSHOT_PATH = 'data/weather-cache.json';
+
+/** This project's repository on GitHub (used for the public raw fetch). */
+export const SNAPSHOT_REPO = 'RounakAd/world-weather';
 
 export function pad2(value: number): string {
   return value.toString().padStart(2, '0');
@@ -169,6 +176,27 @@ function writeToStorage(doc: DailyCacheDoc): void {
   }
 }
 
+/**
+ * Today's committed snapshot, straight from the repository.
+ *
+ * `raw.githubusercontent.com` needs no token for a public repo and sends proper
+ * CORS headers, so a deployed site with an empty cache can use it directly. The
+ * cache-buster keeps a just-updated file visible within a minute instead of the
+ * CDN's default ten.
+ */
+async function readFromRepository(): Promise<DailyCacheDoc | null> {
+  try {
+    const response = await fetch(
+      `https://raw.githubusercontent.com/${SNAPSHOT_REPO}/master/${SNAPSHOT_PATH}?t=${Math.floor(Date.now() / 60_000)}`,
+      { headers: { accept: 'application/json' } },
+    );
+    if (!response.ok) return null;
+    return normalizeDoc(JSON.parse(await response.text()));
+  } catch {
+    return null;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Store                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -244,8 +272,6 @@ class DailyCacheStore {
     this.flushes = this.flushes
       .then(() => writeToServer(doc))
       .catch(() => undefined);
-    // An empty document is not worth a commit — the seed fills it moments later.
-    if (Object.keys(doc.cities).length > 0) githubSync.onSnapshotSaved(doc);
     return this.flushes;
   }
 
@@ -268,12 +294,12 @@ class DailyCacheStore {
         const local = readFromStorage();
         const today = localDayKey();
         // Today's copy wins, from the nearest source first: the dev server's
-        // file, then this browser, then the repository itself — which is the only
-        // thing a deployed site with a cold cache has to go on.
+        // file, then this browser, then the repository itself — which is what
+        // the scheduled Action keeps fresh for every machine that visits.
         const doc =
           (server?.date === today ? server : null) ??
           (local?.date === today ? local : null) ??
-          (await githubSync.readRemoteSnapshot()) ??
+          (await readFromRepository()) ??
           server ??
           local;
         this.doc = doc;

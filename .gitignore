@@ -13,8 +13,9 @@ dist-ssr/
 .workbuddy-ai/tmp/
 .freebuff/preview-*.log*
 
-# One day of real weather, written by the dev server (see src/services/weatherCache.ts).
-# Regenerated on the day's first load, so it is machine output rather than source.
+# One day of real weather: committed to master by the scheduled Action
+# (.github/workflows/weather-snapshot.yml), and written locally by the dev server
+# during development (see src/services/weatherCache.ts).
 data/weather-cache.json
 data/*.tmp
 
